@@ -30,7 +30,7 @@ df.set_index('filename', inplace=True)
 
 # %% Reshape the df to long format
 
-# FIX: need to model 
+# FIX: needs to model interocpetion ~ exteroception, so input needs to be one df with a column of the brainscores for intero, and another for extero
 
 # df_cluster = pd.melt(df.reset_index(), id_vars=['filename'], var_name='condition_block', value_name='value') # value can either be cluster, brain score, or LV
 cluster_cols = [col for col in df.columns if 'thp2n2_cluster' in col] # list cluster column names
