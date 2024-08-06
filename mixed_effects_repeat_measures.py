@@ -5,33 +5,49 @@
 
 # %% Load python pkgs and set paths
 import os
+import subprocess
 import numpy as np
 import pandas as pd
-import seaborn as sns
+# import seaborn as sns
 import matplotlib.pyplot as plt
-import scipy.stats as stats
-from scipy.stats import pearsonr
+import statsmodels.formula.api as smf
+import re
 
 
 # Set paths
-home = f'/home/common/turing/VOX_blood' # home dir
-clin_csv = f'{home}/vox_clinical.csv' # clinical scales
-blood_csv = f'{home}/vox_blood.csv' # blood measures
+wkdir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanInteroExtero_LPS_pls_brainscores_models' # working dir/results dir (must have wrx permissions)
+spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
+scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+
+# Create results directory
+if os.path.isdir(wkdir)==False:
+  cmd = f'mkdir {wkdir}'
+  subprocess.run(cmd, shell=True, executable='/bin/bash')
 
 # Load data
-clin_df = pd.read_csv(clin_csv, sep=',', header=0, index_col=0)
-clin_df.drop(columns=['Unnamed: 17','0=Screening'], inplace=True) # remove cols without data
+df = pd.read_csv(scores_csv, sep=',', header=0)
+df.set_index('filename', inplace=True)
 
-blood_df = pd.read_csv(blood_csv, sep=',', header=0)
-# print(blood_df.head())
-# df_blood = bloodstats(blood_df) # init blood stats class
+# Reshape the df to long format
+df_long = pd.melt(df.reset_index(), id_vars=['filename'], var_name='condition_block', value_name='value') # value can either be cluster, brain score, or LV
 
-# NOTE: only SAD group has data for the last two timepoints ('POST' after Tx, and '2Y-FU' 2-year followup)
-timepoints = ['B1','B2','POST','2Y-FU']
+# Extract condition and block using regex
+def parse_condition_block(condition_block):
+    match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
+    if match:
+        condition = match.group(1)
+        block = int(match.group(2))
+        cmd = f'echo -e "{condition}, {block}"'
+        subprocess.run(cmd, shell=True, executable='/bin/bash')
+        return condition, block
+    return None, None
 
-blooddict = {
-    'LPK': ([3.5,8.8],'10E9/L'), 'EPK': ([3.9,5.2],'10E9/L'), 'HB': ([117,153],'g/L'), 'EVF': ([0.35,0.46],''), 'MCH': ([27,32],'pg'), 'BMCV': ([82,98],'fL'), 
-    'TPK': ([165,387],'10E9/L'), 'BLYMF': ([1.0,3.5],'10E9/L'), 'BEOS': ([0.07,0.3],'10E9/L'), 'BMONO': ([0.3,1.2],'10E9/L'), 'BNEUT': ([1.8,6.3],'10E9/L'),
-      'BBASO': ([0.0,0.1],'10E9/L'), 'BMCHC': ([330,360],'g/L')
-      }
+df_long[['condition', 'block']] = df_long['condition_block'].apply(lambda x: pd.Series(parse_condition_block(x)))
 
+# # Fit the mixed effects model
+# # Here, we model 'value' as a function of 'condition' with random effects for 'subject' and 'block'
+# model = smf.mixedlm("value ~ condition", df_long, groups=df_long["subject"], re_formula="~block")
+# result = model.fit()
+
+# # Print the summary of the model
+# print(result.summary())
