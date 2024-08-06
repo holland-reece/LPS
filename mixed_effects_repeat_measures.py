@@ -37,14 +37,14 @@ df_cluster.rename(columns={'condition': 'condition_block'}, inplace=True) # rena
 
 # Extract condition and block using regex
 def parse_condition_block(condition_block):
-    match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
-    if match:
-        condition = match.group(1)
-        block = int(match.group(2))
-        print(f"{condition}, {block}")
-        return condition, block
-    else:
-      return None, None
+  match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
+  if match:
+      condition = match.group(1)
+      block = int(match.group(2))
+      print(f"{condition}, {block}")
+      return condition, block
+  else:
+    return None, None
     
 # Separate condition and block into their own columns
 df_cluster[['condition', 'block']] = df_cluster['condition_block'].apply(lambda x: pd.Series(parse_condition_block(x)))
@@ -58,6 +58,22 @@ for cluster in cluster_cols:
   model = smf.mixedlm(f"{cluster} ~ condition", df_thiscluster, groups=df_thiscluster["subjID"], re_formula="~block")
   result = model.fit()
 
+  # Extract fitted values for plotting
+  df_thiscluster['fitted'] = result.fittedvalues
+
+  # Plot the results
+  plt.plot(df_thiscluster['block'], df_thiscluster['fitted'], label=cluster)
+
+# Add labels and legend
+plt.xlabel('Block')
+plt.ylabel('Fitted Values')
+plt.title('Fitted Values by Cluster')
+plt.legend(loc='best')
+
+# Save and show the plot
+plt.savefig(os.path.join(wkdir, 'fitted_values_by_cluster.png'))
+plt.show()
+
 # Print the summary of the model
-print(result.summary())
+# print(result.summary())
 # %%
