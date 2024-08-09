@@ -22,13 +22,14 @@ import re
 
 
 # Set paths
-wkdir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanInteroExtero_LPS_pls_brainscores_models' # working dir/results dir (must have wrx permissions)
+# wkdir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanInteroExtero_LPS_pls_brainscores_models' # working dir/results dir (must have wrx permissions)
 spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_intero-extero_allblocks'
 
 # Create results directory
-if os.path.isdir(wkdir)==False:
-  cmd = f'mkdir {wkdir}'
+if os.path.isdir(savedir)==False:
+  cmd = f'mkdir {savedir}'
   subprocess.run(cmd, shell=True, executable='/bin/bash')
 
 # Load data
@@ -68,11 +69,10 @@ df_reshape.replace('interoception', interoception, inplace=True)
 df_reshape.replace('exteroception', exteroception, inplace=True)
 
 
-
 # %%
 # cluster_cols = [col for col in df_init.columns if 'thp2n2_cluster' in col] # list cluster column names
 # brainscore_cols = [col for col in df_init.columns if 'bs_lv1' == col] # list brain score column names
-lv_data = 'bs_lv1'
+lv_data = 'bs_lv5'
 
 # for lv_data in [cluster_cols[0]]:
 # for lv_data in brainscore_cols:
@@ -85,10 +85,8 @@ df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block
 
 # Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
 # model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["block"], re_formula="~subjID") # , groups=df["subjID"], re_formula="~block"
-model = smf.mixedlm("bs_lv1 ~ condition + block", df, groups=df["subjID"])
+model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block")
 result = model.fit()
-
-
 
 # Print the summary of the model
 print(result.summary())
@@ -101,14 +99,15 @@ df['predicted'] = result.fittedvalues
 
 # Plot actual vs predicted
 plt.figure(figsize=(10, 6))
-plt.scatter(df['bs_lv1'], df['predicted'])
-plt.xlabel('Actual bs_lv1')
-plt.ylabel('Predicted bs_lv1')
-plt.title('Actual vs Predicted bs_lv1')
-plt.plot([df['bs_lv1'].min(), df['bs_lv1'].max()],
-         [df['bs_lv1'].min(), df['bs_lv1'].max()],
+plt.scatter(df[lv_data], df['predicted'])
+plt.xlabel(f'Actual {lv_data}')
+plt.ylabel(f'Predicted {lv_data}')
+plt.title(f'Actual vs Predicted {lv_data}')
+plt.plot([df[lv_data].min(), df[lv_data].max()],
+         [df[lv_data].min(), df[lv_data].max()],
          color='red')  # line of perfect prediction
-plt.show()
+plt.savefig(f'{savedir}/{lv_data}_actual-predicted.png')
+# plt.show()
 
 
 # %% Plot fitted values from the model
@@ -122,11 +121,11 @@ plt.plot(result.fittedvalues)
 # Add labels and legend
 # plt.xlabel('Block')
 plt.ylabel('Fitted Values')
-plt.title(f'Cluster ({lv_data}) values by condition (extero/interoception)')
+plt.title(f'{lv_data} values by condition (extero/interoception)')
 # plt.legend(loc='best')
 
 # Save and show the plot
-plt.savefig(os.path.join(wkdir, 'fitted_values_by_cluster.png'))
+plt.savefig(f'{savedir}/{lv_data}_fitted_vals.png')
 plt.show()
 
 # %% Plot random effects to see how much variance is explained by each subject
@@ -141,26 +140,31 @@ random_effects_df.plot(kind='bar', figsize=(10, 6))
 plt.title('Random Effects (variance explained by each subject)')
 plt.xlabel('Subject')
 plt.ylabel('Random Effect Value')
+plt.savefig(f'{savedir}/{lv_data}_subject_rand_effects.png')
 plt.show()
 
 
 
-# %%
+# %% Fixed effects: condition and block
 import seaborn as sns
 
 # Plot fixed effects: lv_data by condition
-sns.lmplot(x='condition', y='bs_lv1', data=df, aspect=1.5, ci=None)
+sns.lmplot(x='condition', y=lv_data, data=df, aspect=1.5, ci=None)
 plt.title(f'Fixed Effect of Condition on {lv_data} (Condition: extero=1, intero=0)')
+plt.savefig(f'{savedir}/{lv_data}_fixed_effect_cond.png')
 plt.show()
 
 # Plot fixed effects: lv_data by block
-sns.lmplot(x='block', y='bs_lv1', data=df, aspect=1.5, ci=None)
+sns.lmplot(x='block', y=lv_data, data=df, aspect=1.5, ci=None)
 plt.title(f'Fixed Effect of Block on {lv_data}')
+plt.savefig(f'{savedir}/{lv_data}_fixed_effect_block.png')
 plt.show()
 
 
 # %% Plot trajectories of subjects' cluster/brain scores over blocks (by condition, then averaged)
-lv_data_string = 'LV1 Brain Score' # Choose a title for the brain score/cluster for plots
+import seaborn as sns
+
+lv_data_string = 'LV5 Brain Score' # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique() # Define conditions
 
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8)) # Initiate figure
@@ -213,6 +217,7 @@ plot_with_labels(df_avg, ax, f'Averaged {lv_data_string} Across Conditions', lv_
 # Adjust the layout and show the plot
 plt.tight_layout()
 plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks.png')
 plt.show()
 
 
