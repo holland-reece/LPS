@@ -1,6 +1,6 @@
 # Mixed Effects Linear Model with Repeated Measures for LPS Brain Scores
 
-# Updated 2024-08-09
+# Updated 2024-08-22
 # Created 2024-08-06
 
 # DESCRIPTION
@@ -72,10 +72,10 @@ df_reshape.replace('interoception', interoception, inplace=True)
 df_reshape.replace('exteroception', exteroception, inplace=True)
 
 
-# %%
+# %% Define and fit the model
 # cluster_cols = [col for col in df_init.columns if 'thp2n2_cluster' in col] # list cluster column names
 # brainscore_cols = [col for col in df_init.columns if 'bs_lv1' == col] # list brain score column names
-lv_data = 'lv4_thp2n2_cluster1'
+lv_data = 'lv1_thp2n2_cluster1' # specify brain score or latent variable you want to model
 
 # for lv_data in [cluster_cols[0]]:
 # for lv_data in brainscore_cols:
@@ -88,6 +88,7 @@ df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block
 
 # Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
 model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
+# model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # try with groups=df["block"] (averages across subjects?)
 result = model.fit()
 
 # Print the summary of the model
@@ -108,8 +109,8 @@ plt.title(f'Actual vs Predicted {lv_data}')
 plt.plot([df[lv_data].min(), df[lv_data].max()],
          [df[lv_data].min(), df[lv_data].max()],
          color='red')  # line of perfect prediction
-plt.savefig(f'{savedir}/{lv_data}_actual-predicted.png')
-# plt.show()
+# plt.savefig(f'{savedir}/{lv_data}_actual-predicted.png')
+plt.show()
 
 
 # # %% Plot fitted values from the model
@@ -142,7 +143,7 @@ random_effects_df.plot(kind='bar', figsize=(10, 6))
 plt.title('Random Effects (variance explained by each subject)')
 plt.xlabel('Subject')
 plt.ylabel('Random Effect Value')
-plt.savefig(f'{savedir}/{lv_data}_subject_rand_effects.png')
+# plt.savefig(f'{savedir}/{lv_data}_subject_rand_effects.png')
 plt.show()
 
 
@@ -153,13 +154,13 @@ import seaborn as sns
 # Plot fixed effects: lv_data by condition
 sns.lmplot(x='condition', y=lv_data, data=df, aspect=1.5, ci=None)
 plt.title(f'Fixed Effect of Condition on {lv_data} (Condition: extero=1, intero=0)')
-plt.savefig(f'{savedir}/{lv_data}_fixed_effect_cond.png')
+# plt.savefig(f'{savedir}/{lv_data}_fixed_effect_cond.png')
 plt.show()
 
 # Plot fixed effects: lv_data by block
 sns.lmplot(x='block', y=lv_data, data=df, aspect=1.5, ci=None)
 plt.title(f'Fixed Effect of Block on {lv_data}')
-plt.savefig(f'{savedir}/{lv_data}_fixed_effect_block.png')
+# plt.savefig(f'{savedir}/{lv_data}_fixed_effect_block.png')
 plt.show()
 
 
@@ -203,14 +204,6 @@ for i, condition in enumerate(conditions):
     ax = axes[i]
     plot_with_labels(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring}", lv_data, colors)
 
-# # Plot each condition in separate subplots
-# for i, condition in enumerate(conditions):
-#     ax = axes[i]
-#     plot_with_labels(df[df['condition'] == condition], ax, f'Condition {condition}', lv_data, colors)
-
-
-# Plot the averaged trajectories in the last subplot
-
 # Calculate the mean of lv_data for each subject across conditions
 df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data].mean()
 ax = axes[-1]
@@ -219,8 +212,8 @@ plot_with_labels(df_avg, ax, f'Averaged {lv_data_string} Across Conditions', lv_
 # Adjust the layout and show the plot
 plt.tight_layout()
 plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks.png')
+# plt.savefig(f'{savedir}/{lv_data}_change_over_blocks.png')
 plt.show()
 
 
-# %%
+# %% Recreate above 3-panel plot, but show teh averaged line across subjects
