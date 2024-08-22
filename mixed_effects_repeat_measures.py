@@ -216,4 +216,57 @@ plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
 plt.show()
 
 
-# %% Recreate above 3-panel plot, but show teh averaged line across subjects
+# %% Recreate above 3-panel plot, but show the averaged line across subjects
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+lv_data_string = 'LV3 Cluster1 (thresh +/-2) value'  # Choose a title for the brain score/cluster for plots
+conditions = df['condition'].unique()  # Define conditions
+
+fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure
+
+# Define the color palette
+palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
+colors = dict(zip(df['subjID'].unique(), palette))
+
+# Plotting function with labels directly on lines and average line
+def plot_with_labels(df, ax, title, lv_data, colors):
+    for subj in df['subjID'].unique():
+        subj_df = df[df['subjID'] == subj]
+        ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj])
+
+        # Label the line at the last data point
+        ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
+                fontsize=9, color=colors[subj], ha='left', va='center')
+
+    # Calculate and plot the mean across subjects for each block
+    mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+    ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+
+    ax.set_title(title)
+    ax.set_xlabel('Block')
+    ax.set_ylabel(lv_data)
+    ax.legend(loc='best')
+
+# Plot each condition separately
+for i, condition in enumerate(conditions):
+    
+    # Get labels for conditions
+    if condition == 0:
+        condstring = 'Interoception'
+    elif condition == 1:
+        condstring = 'Exteroception'
+
+    ax = axes[i]
+    plot_with_labels(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring}", lv_data_string, colors)
+
+# Plot the averaged trajectories in the last subplot
+df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data_string].mean()
+ax = axes[-1]
+plot_with_labels(df_avg, ax, f'Averaged {lv_data_string} Across Conditions', lv_data_string, colors)
+
+# Adjust the layout and show the plot
+plt.tight_layout()
+plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
+plt.savefig(f'{savedir}/{lv_data_string}_change_over_blocks.png')
+plt.show()
