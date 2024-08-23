@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 # import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
 import statsmodels.formula.api as smf
 import re
 
@@ -75,7 +76,7 @@ df_reshape.replace('exteroception', exteroception, inplace=True)
 # %% Define and fit the model
 # cluster_cols = [col for col in df_init.columns if 'thp2n2_cluster' in col] # list cluster column names
 # brainscore_cols = [col for col in df_init.columns if 'bs_lv1' == col] # list brain score column names
-lv_data = 'lv1_thp2n2_cluster1' # specify brain score or latent variable you want to model
+lv_data = 'lv1_thp2n2_cluster2' # specify brain score or latent variable you want to model
 
 # for lv_data in [cluster_cols[0]]:
 # for lv_data in brainscore_cols:
@@ -165,9 +166,9 @@ plt.show()
 
 
 # %% Plot trajectories of subjects' cluster/brain scores over blocks (by condition, then averaged)
-import seaborn as sns
+# import seaborn as sns
 
-lv_data_string = 'LV3 Cluster1 (thresh +/-2) value' # Choose a title for the brain score/cluster for plots
+lv_data_string = 'LV1 Cluster1 (thresh +/-2) value' # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique() # Define conditions
 
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8)) # Initiate figure
@@ -217,10 +218,7 @@ plt.show()
 
 
 # %% Recreate above 3-panel plot, but show the averaged line across subjects
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-lv_data_string = 'LV3 Cluster1 (thresh +/-2) value'  # Choose a title for the brain score/cluster for plots
+lv_data_string = 'LV1 Cluster2 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique()  # Define conditions
 
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure
@@ -230,7 +228,7 @@ palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
 colors = dict(zip(df['subjID'].unique(), palette))
 
 # Plotting function with labels directly on lines and average line
-def plot_with_labels(df, ax, title, lv_data, colors):
+def plot_with_labels_avg(df, ax, title, lv_data, colors):
     for subj in df['subjID'].unique():
         subj_df = df[df['subjID'] == subj]
         ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj])
@@ -245,8 +243,8 @@ def plot_with_labels(df, ax, title, lv_data, colors):
 
     ax.set_title(title)
     ax.set_xlabel('Block')
-    ax.set_ylabel(lv_data)
-    ax.legend(loc='best')
+    # ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
+    # ax.legend(loc='best')
 
 # Plot each condition separately
 for i, condition in enumerate(conditions):
@@ -258,15 +256,16 @@ for i, condition in enumerate(conditions):
         condstring = 'Exteroception'
 
     ax = axes[i]
-    plot_with_labels(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring}", lv_data_string, colors)
+    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring}", lv_data, colors)
 
 # Plot the averaged trajectories in the last subplot
-df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data_string].mean()
+df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data].mean()
 ax = axes[-1]
-plot_with_labels(df_avg, ax, f'Averaged {lv_data_string} Across Conditions', lv_data_string, colors)
+plot_with_labels_avg(df_avg, ax, f'{lv_data_string} Averaged Across Conditions', lv_data, colors)
 
 # Adjust the layout and show the plot
 plt.tight_layout()
-plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
-plt.savefig(f'{savedir}/{lv_data_string}_change_over_blocks.png')
+plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1)) # define legend (lists subjects)
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg.png') # save figure as PNG
 plt.show()
+
