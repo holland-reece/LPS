@@ -23,9 +23,9 @@ import re
 
 
 # Set paths
-spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanIntero_lps_10blocks_all_pls_1_n22' # dir of the matlab SPAT results
-scores_csv = f'{spat_dir}/meanIntero_lps_10blocks_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_intero_allblocks'
+spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanExtero_lps_10blocks_all_pls_1_n22' # dir of the matlab SPAT results
+scores_csv = f'{spat_dir}/meanExtero_lps_10blocks_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_extero_allblocks'
 
 # spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 # scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
@@ -73,29 +73,35 @@ df_reshape = df_reshape[['subjID', 'condition', 'block'] + [ c for c in df_resha
 df_reshape.replace('interoception', interoception, inplace=True)
 df_reshape.replace('exteroception', exteroception, inplace=True)
 
-
 # %% Define and fit the model
-# cluster_cols = [col for col in df_init.columns if 'thp2n2_cluster' in col] # list cluster column names
-# brainscore_cols = [col for col in df_init.columns if 'bs_lv1' == col] # list brain score column names
-# lv_data = 'lv1_thp2n2_cluster1' # specify brain score or latent variable you want to model
-lv_data = 'bs_lv1'
-
-# for lv_data in [cluster_cols[0]]:
-# for lv_data in brainscore_cols:
-  # df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[cluster]], axis=1)
-df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
+lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
 
 
-# df_LV = pd.concat(df_reshape['subjID'],df_reshape['condition'], df_reshape['block'], df_reshape[''])
-# df_intero = df_reshape[df_reshape['condition']=='interoception'] # just interoception rows
+# df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
 
-# Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
-# model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
-model = smf.mixedlm(f"{lv_data} ~ block", df, groups=df["subjID"]) # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
+# # Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
+# model = smf.mixedlm(f"{lv_data} ~ block", df, groups=df["subjID"]) # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
+# # model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # try with groups=df["block"] (averages across subjects?)
+# result = model.fit()
 
-result = model.fit()
 
-# Print the summary of the model
+# # Print the summary of the model
+# print(result.summary())
+
+
+# 1-way ANOVA
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import AnovaRM
+
+# Don't need condition here (only have one)
+df = pd.concat([df_reshape['subjID'], df_reshape['block'], df_reshape[lv_data]], axis=1)
+
+# If using repeated measures ANOVA (AnovaRM) with subject as a random effect:
+anova_rm = AnovaRM(df, depvar=lv_data, subject='subjID', within=['block'])
+result = anova_rm.fit()
+
+# Print the summary of the repeated measures ANOVA
 print(result.summary())
 
 
@@ -262,7 +268,8 @@ def plot_with_labels_avg(df, ax, title, lv_data, colors):
 
 #     ax = axes[i]
 #     plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
-
+condition = 1
+condstring = 'Exteroception'
 # ax = axes[1]
 plot_with_labels_avg(df[df['condition'] == condition], axes, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
 
@@ -278,5 +285,21 @@ plt.tight_layout()
 plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg.png') # save figure as PNG
 plt.show()
 
+
+# %% Plot ANOVA results
+# Calculate means and standard errors for each block
+means = df.groupby('block')[lv_data].mean()
+errors = df.groupby('block')[lv_data].sem()
+
+# Create a bar plot
+plt.figure(figsize=(10, 6))
+plt.bar(means.index, means, yerr=errors, capsize=5, color='skyblue')
+
+# Add labels and title
+plt.xlabel('Block')
+plt.ylabel(f'{lv_data} Means and Standard Deviation')
+plt.title(f'Effect of Block on {lv_data}')
+plt.savefig(f'{savedir}/{lv_data}_effect_of_block_anova.png') # save figure as PNG
+plt.show()
 
 # %%
