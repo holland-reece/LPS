@@ -23,9 +23,9 @@ import re
 
 
 # Set paths
-spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/meanExtero_lps_10blocks_all_pls_1_n22' # dir of the matlab SPAT results
-scores_csv = f'{spat_dir}/meanExtero_lps_10blocks_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_extero_allblocks'
+spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16' # dir of the matlab SPAT results
+scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lpl_intero-extero_allblocks'
 
 # spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 # scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
@@ -54,12 +54,12 @@ df_reshape.rename(columns={'condition': 'condition_block'}, inplace=True) # rena
 
 # Extract condition and block using regex
 def parse_condition_block(condition_block):
-  match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
+  match = re.match(r'mean_(\w+)_block(\d+)_pl', condition_block)
   # match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
   if match:
       condition = match.group(1)
       block = int(match.group(2))
-      # print(f"{condition}, {block}") # TEST
+      print(f"{condition}, {block}") # TEST
       return condition, block
   else:
     return None, None
@@ -231,8 +231,8 @@ plt.show()
 # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique()  # Define conditions
 
-fig, axes = plt.subplots(1, len(conditions), figsize=(12, 8))  # Initiate figure with one panel
-# fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure with 3 panels
+# fig, axes = plt.subplots(1, len(conditions), figsize=(12, 8))  # Initiate figure with one panel
+fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure with 3 panels
 
 
 # Define the color palette
@@ -243,7 +243,7 @@ colors = dict(zip(df['subjID'].unique(), palette))
 def plot_with_labels_avg(df, ax, title, lv_data, colors):
     for subj in df['subjID'].unique():
         subj_df = df[df['subjID'] == subj]
-        ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj])
+        ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
 
         # Label the line at the last data point
         ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
@@ -251,6 +251,7 @@ def plot_with_labels_avg(df, ax, title, lv_data, colors):
 
     # Calculate and plot the mean across subjects for each block
     mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+    print(mean_df)
     ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
 
     ax.set_title(title)
@@ -258,27 +259,56 @@ def plot_with_labels_avg(df, ax, title, lv_data, colors):
     ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
     # ax.legend(loc='best')
 
-# # Plot each condition separately
-# for i, condition in enumerate(conditions):
+# Plot each condition separately
+for i, condition in enumerate(conditions):
     
-#     # Get labels for conditions
-#     if condition == 0:
-#         condstring = 'Interoception'
-#     elif condition == 1:
-#         condstring = 'Exteroception'
+    # Get labels for conditions
+    if condition == 0:
+        condstring = 'Interoception'
+    elif condition == 1:
+        condstring = 'Exteroception'
 
-#     ax = axes[i]
-#     plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
-condition = 1
-condstring = 'Exteroception'
+    ax = axes[i]
+    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
+
+# # Plot one condition only
+# condition = 1
+# condstring = 'Exteroception'
 # ax = axes[1]
-plot_with_labels_avg(df[df['condition'] == condition], axes, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
+# plot_with_labels_avg(df[df['condition'] == condition], axes, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
+
+# Plot only mean lines on last panel
+mean_colors = ['red', 'blue']
+ax = axes[-1]
+# for i, condition in enumerate(conditions):
+for condition in conditions:
+
+    # Get labels for conditions
+    if condition == 0:
+        condstring = 'Interoception'
+    elif condition == 1:
+        condstring = 'Exteroception'
+
+    df_cond = df[df['condition'] == condition]
+    mean_dfc = df_cond.groupby('block', as_index=False)[lv_data].mean()
+    ax.plot(mean_dfc['block'], mean_dfc[lv_data], marker='o', color=mean_colors[condition], linewidth=2, label=condstring)
+    # ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+
+
+ax.set_title(f'Intero- vs. Exteroception Average Effects on {lv_data_string}')
+ax.set_xlabel('Block')
+ax.set_ylabel(f'{lv_data_string} average across subjects')
 
 
 # # Plot the averaged trajectories in the last subplot
-# df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data].mean()
+# # df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data].mean()
 # ax = axes[-1]
-# plot_with_labels_avg(df_avg, ax, f'Intero- and Exteroception Averaged Effect on {lv_data_string}', lv_data, colors)
+# # plot_with_labels_avg(df_avg, ax, f'Intero- and Exteroception Averaged Effect on {lv_data_string}', lv_data, colors)
+# # Calculate and plot the mean across subjects for each block
+# mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+# ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+
+
 
 # Adjust the layout and show the plot
 plt.tight_layout()
