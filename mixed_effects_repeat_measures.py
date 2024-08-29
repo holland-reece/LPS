@@ -1,6 +1,6 @@
 # Mixed Effects Linear Model with Repeated Measures for LPS Brain Scores
 
-# Updated 2024-08-22
+# Updated 2024-08-29
 # Created 2024-08-06
 
 # DESCRIPTION
@@ -74,25 +74,26 @@ df_reshape.replace('interoception', interoception, inplace=True)
 df_reshape.replace('exteroception', exteroception, inplace=True)
 
 # %% Define and fit the model
-lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
+lv_data = 'bs_lv1' # specify brain score or latent variable you want to model
+lv_data_string = 'Brainscore LV1' # string for titles and plot headers and such
+
+df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
+
+# Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
+model = smf.mixedlm(f"{lv_data} ~ block", df, groups=df["subjID"]) # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
+# model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # try with groups=df["block"] (averages across subjects?)
+result = model.fit()
+
+# Print the summary of the model
+print(result.summary())
 
 
-# df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
-
-# # Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
-# model = smf.mixedlm(f"{lv_data} ~ block", df, groups=df["subjID"]) # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
-# # model = smf.mixedlm(f"{lv_data} ~ condition", df, groups=df["subjID"], re_formula="~block") # try with groups=df["block"] (averages across subjects?)
-# result = model.fit()
-
-
-# # Print the summary of the model
-# print(result.summary())
-
-
-# 1-way ANOVA
+# %% 1-way ANOVA
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import AnovaRM
+
+lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
 
 # Don't need condition here (only have one)
 df = pd.concat([df_reshape['subjID'], df_reshape['block'], df_reshape[lv_data]], axis=1)
@@ -225,9 +226,9 @@ plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1))
 plt.show()
 
 
-# %% Recreate above 3-panel plot, but show the averaged line across subjects
+# %% Plot trajectories of subjects' cluster/brain scores over blocks with average line
+# Recreate above 3-panel plot, but show the averaged line across subjects
 # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
-lv_data_string = 'Brainscore LV1'
 conditions = df['condition'].unique()  # Define conditions
 
 fig, axes = plt.subplots(1, len(conditions), figsize=(12, 8))  # Initiate figure with one panel
