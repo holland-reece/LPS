@@ -25,7 +25,7 @@ import re
 # Set paths
 spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16' # dir of the matlab SPAT results
 scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lpl_intero-extero_allblocks'
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/pl_intero-extero_allblocks'
 
 # spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 # scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
@@ -298,6 +298,7 @@ for condition in conditions:
 ax.set_title(f'Intero- vs. Exteroception Average Effects on {lv_data_string}')
 ax.set_xlabel('Block')
 ax.set_ylabel(f'{lv_data_string} average across subjects')
+ax.legend()
 
 
 # # Plot the averaged trajectories in the last subplot
