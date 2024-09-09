@@ -1,6 +1,6 @@
 # Mixed Effects Linear Model with Repeated Measures for LPS Brain Scores
 
-# Updated 2024-08-29
+# Updated 2024-09-04
 # Created 2024-08-06
 
 # DESCRIPTION
@@ -25,7 +25,7 @@ import re
 # Set paths
 spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16' # dir of the matlab SPAT results
 scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/pl_intero-extero_allblocks'
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/pl_intero-extero_allblocks_n16'
 
 # spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 # scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
@@ -231,7 +231,13 @@ plt.show()
 # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique()  # Define conditions
 
-# fig, axes = plt.subplots(1, len(conditions), figsize=(12, 8))  # Initiate figure with one panel
+y_error = np.array([2.1767, 2.8459]) # get from SPAT report BSR range
+
+# # drop one subject row
+# i = df[(df.subjID == 'sub-105')].index
+# df = df.drop(i)
+
+# fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure with 3 panels
 
 
@@ -257,6 +263,7 @@ def plot_with_labels_avg(df, ax, title, lv_data, colors):
     ax.set_title(title)
     ax.set_xlabel('Block')
     ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
+    ax.set_ylim([-65,45]) # set all y-axis limits to this range
     # ax.legend(loc='best')
 
 # Plot each condition separately
@@ -273,7 +280,7 @@ for i, condition in enumerate(conditions):
 
 # # Plot one condition only
 # condition = 1
-# condstring = 'Exteroception'
+# condstring = 'Interoception'
 # ax = axes[1]
 # plot_with_labels_avg(df[df['condition'] == condition], axes, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
 
@@ -294,10 +301,15 @@ for condition in conditions:
     ax.plot(mean_dfc['block'], mean_dfc[lv_data], marker='o', color=mean_colors[condition], linewidth=2, label=condstring)
     # ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
 
+    # add error bar
+    y_err = np.multiply(np.ones([2,len(mean_dfc['block'])]).transpose(), y_error).transpose()
+    ax.errorbar(mean_dfc['block'], mean_dfc[lv_data],yerr=y_err, color=mean_colors[condition]) # error bar markers
+    ax.fill_between(mean_dfc['block'], mean_dfc[lv_data]-y_err[0,], mean_dfc[lv_data]+y_err[1,], color=mean_colors[condition], alpha=0.4) # shaded error bars
 
 ax.set_title(f'Intero- vs. Exteroception Average Effects on {lv_data_string}')
 ax.set_xlabel('Block')
 ax.set_ylabel(f'{lv_data_string} average across subjects')
+ax.set_ylim([-65,45]) # set all y-axis limits to this range
 ax.legend()
 
 
@@ -314,7 +326,7 @@ ax.legend()
 # Adjust the layout and show the plot
 plt.tight_layout()
 # plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1)) # define legend (lists subjects)
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg.png') # save figure as PNG
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg_err.png') # save figure as PNG
 plt.show()
 
 
