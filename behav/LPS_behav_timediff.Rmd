@@ -1,14 +1,16 @@
+```
 # Liisbeth's code for LPS study behavioral analysis
 
 ##### Edited by Holland Brown to plot effect of block (time) on behav scores
 
-##### Updated 2024-09-09
+##### Updated 2024-09-10
+##### Created 2024-09-09
 
-## Note:
-#### where to get block labels? (can't assume spreadsheets are in chronological order)
-#### may need to get block labels from logfiles >> '/LPS_STHLM/sourcedata/EmoRegLogfiles' or '/.../InteroceptionLogFiles'
+## Notes:
+#### Get timing info (block labels) from /LPS_STHLM/sourcedata/InteroceptionLogFiles/ses-0{1-4}_onsets.csv
+#### BQ = body question (i.e. interoception); WQ = word question (i.e. exteroception)
 
-# ---------------------------------------------------------------
+```
 
 #1. Packages
 ```{r}
@@ -18,36 +20,39 @@ library(reshape2)      #needed for changing between long/wide format
 library(readxl)        #needed for importing excel files
 library(ggpubr)        #needed for adding significance bars to plots
 library(car)           #for recoding the values
+
+# Mixed effects linear models
+library(lme4)
+library(lmerTest)
+library(emmeans) # post-hoc comparisons
+
+# Other useful R packages
+library(glue) # lets me code sort of like I can with f-strings in Python (sort of)
 ```
 
 #2. Setting the working directory and importing behavioral data
-
 ```{r}
-setwd("/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data")
-task_ses1 <- read.csv("summary_ses-01_interoception_responses.csv")
-task_all_sessions <- read.csv("summary_allsessions_interoception_responses.csv")
-task_all_sessions_acc <- read.csv("summary_allsessions_interoception_acc.csv")
-session_conditions <- read_excel("cond_ses_info.xlsx")
+setwd("/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data") # location of data and this script
+task_ses1 <- read.csv("summary_ses-01_interoception_responses.csv") # contains condition, reaction time, and response for one session
+task_all_sessions <- read.csv("summary_allsessions_interoception_responses.csv") # contains condition, reaction time, and response for all sessions
+task_all_sessions_acc <- read.csv("summary_allsessions_interoception_acc.csv") # contains condition, reaction time, response, and accuracy for all sessions
+session_conditions <- read_excel("cond_ses_info.xlsx") # contains condition names ("morningpl", "morninglps", etc)
 ```
 
-#3. Data modification - reformatting data structures
+#3. Data preparation
 ```{r}
 
-## 3.1.Merging the info from two datasets: Matching session number (e.g. "ses-01") to the condition (e.g. "plmorning")
+## 3.1. Merging the info from two datasets: Matching session number (e.g. "ses-01") to the condition (e.g. "plmorning")
+session_long <- melt(session_conditions, id.vars = c("subjectID", "anat", "pls", "group"), value.name = "session_cond", variable.name = "session_num") # change session info file to long format
 
-session_long <- melt(session_conditions, id.vars = c("subjectID", "anat", "pls", "group"), value.name = "session_cond", variable.name = "session_num")   #Changing the session info file to long format
-
-
-
+# Merge task_all_sessions, task_all_sessions_acc by matching subject ID, condition, reation time, session, and response
 merged_all_sessions_acc <- left_join(task_all_sessions, task_all_sessions_acc, by=join_by(subjid == subjid, cond == cond, rt == rt, session == session, resp == resp), relationship = "many-to-one", multiple = "first")
 
-
+# Merge the datasets based on matching subject IDs and session numbers in both datasets. Result is a merged dataset containing the session number and session condition
 merged_all_sessions <- left_join(merged_all_sessions_acc, session_long, by=join_by(subjid == subjectID, session == session_num))
-  #matches the subject IDs and session numbers in both datasets and merges the datasets based on that. Result is a merged dataset containing the session number and session condition
 
 
-## 3.2. Recoding the labels
-
+## 3.2. Recoding the labels (recode responses on the 4-point scale in the opposite direction)
 merged_all_sessions$resp_re <- car::recode(merged_all_sessions$resp, "1 = 4; 2 = 3; 3 = 2; 4 = 1")
 merged_all_sessions$cresp_re <- car::recode(merged_all_sessions$cresp, "1 = 4; 2 = 3; 3 = 2; 4 = 1")
 
@@ -62,350 +67,207 @@ merged_interBQ2 <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sess
 complete_BQ1 <- dplyr::filter(merged_interBQ1, merged_interBQ1$subjid != "sub-120" & merged_interBQ1$subjid != "sub-138" & merged_interBQ1$subjid != "sub-141")
 complete_BQ2 <- dplyr::filter(merged_interBQ2, merged_interBQ1$subjid != "sub-120" & merged_interBQ1$subjid != "sub-138" & merged_interBQ1$subjid != "sub-141")
 
-
-
-
 ### 3.3.1. Exteroception: Separating WQ1 & WQ2
 merged_exte <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sessions$cond == "WQ1" | merged_all_sessions$cond == "WQ2"))
 merged_exteWQ1 <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sessions$cond == "WQ1"))
 merged_exteWQ2 <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sessions$cond == "WQ2"))
-
 
 ####### Filtering for participants, who have data for all sessions
 complete_WQ1 <- dplyr::filter(merged_exteWQ1, merged_exteWQ1$subjid != "sub-120" & merged_exteWQ1$subjid != "sub-138" & merged_exteWQ1$subjid != "sub-141")
 complete_WQ2 <- dplyr::filter(merged_exteWQ2, merged_exteWQ1$subjid != "sub-120" & merged_exteWQ1$subjid != "sub-138" & merged_exteWQ1$subjid != "sub-141")
 
 
-# ADD: separate blocks to get time effects
+```
+
+
+#4. Mixed effects linear models
+
+##4.1 Effect of block on response with condition as a fixed effect and subject as a random effect
+```{r}
+# df <- merged_exte # exteroception
+df <- merged_inter # interoception
+
+# Fit the model
+model <- lmer(resp ~ block * session_cond + (1 | subjid), data = df)
+
+# Summary of the model
+summary(model)
+
+# Check residuals
+# plot(model)
+
+# Perform ANOVA to check significance of terms
+anova(model)
+
+
+```
+
+##4.2 Effect of block on reaction time with condition as a fixed effect and subject as a random effect
+```{r}
+# df <- merged_exte # exteroception
+df <- merged_inter # interoception
+
+# Fit the model
+model <- lmer(rt ~ block * session_cond + (1 | subjid), data = df)
+
+# Summary of the model
+summary(model)
+
+# Check residuals
+# plot(model)
+
+# Perform ANOVA to check significance of terms
+anova(model)
+
+# Post-hoc comparisons
+emmeans(model, pairwise ~ block * session_cond)
 
 ```
 
 
-#4. Calculate subjects' means over trials 1-10
+##4.5 Difference in block effects across conditions and extero/intero
 ```{r}
+df <- merged_all_sessions # interoception and exteroception
 
-# ADD: calculate means per block to get time effects
+# Modify the model to focus on block and condition interaction
+model_block_condition <- lmer(rt ~ block * session_cond + (1 | subjid), data = df)
 
-meanstrial1to10 <- data.frame()
+# # Summary of the model
+# summary(model_block_condition)
 
-uniquesub <- unique(complete_WQ1$subjid)
-uniqueses <- unique(complete_WQ1$session_cond)
+# # Post-hoc comparisons: contrast block effects across conditions
+# emm <- emmeans(model_block_condition, ~ block | session_cond, pbkrtest.limit = 3843)
+# 
+# # Pairwise comparison of block effects across conditions
+# pairs(emm)
 
-for (i in uniquesub) {
-  for (x in uniqueses) {
-    temp <- dplyr::filter(complete_WQ1, complete_WQ1$subjid == i & complete_WQ1$session_cond == x)
-  meanstrial1to10[i, x] <- mean(temp$rt, na.rm = TRUE)
-    
-  }
+# run ANOVA on model to see significance of the residuals
+anova(model_block_condition)
 
-}
-meanstrial1to10$subjectid <- row.names(meanstrial1to10)
-
-
-meanstrial1to10 <- melt(meanstrial1to10, id.vars = "subjectid")
-
-########################################
-meanstrial1to10_acc <- data.frame()
-for (i in uniquesub) {
-  for (x in uniqueses) {
-    temp <- dplyr::filter(complete_WQ1, complete_WQ1$subjid == i & complete_WQ1$session_cond == x)
-  meanstrial1to10_acc[i, x] <- mean(temp$acc, na.rm = TRUE)
-    
-  }
-
-}
-meanstrial1to10_acc$subjectid <- row.names(meanstrial1to10_acc)
+# Plot block effects across conditions
+ggplot(df, aes(x = block, y = rt, color = session_cond)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ session_cond) +
+  theme_minimal() +
+  labs(title = "Effect of Block on Accuracy Across Conditions",
+       x = "Block",
+       y = "Accuracy")
 
 
-meanstrial1to10_acc <- melt(meanstrial1to10_acc, id.vars = "subjectid")
-##################################################################
 
-
-meanstrial1to10BQ1RT <- data.frame()
-
-uniquesub <- unique(complete_BQ1$subjid)
-uniqueses <- unique(complete_BQ1$session_cond)
-
-for (i in uniquesub) {
-  for (x in uniqueses) {
-    temp <- dplyr::filter(complete_BQ1, complete_BQ1$subjid == i & complete_BQ1$session_cond == x)
-  meanstrial1to10BQ1RT[i, x] <- mean(temp$rt, na.rm = TRUE)
-    
-  }
-
-}
-meanstrial1to10BQ1RT$subjectid <- row.names(meanstrial1to10BQ1RT)
-meanstrial1to10BQ1RT <- melt(meanstrial1to10BQ1RT, id.vars = "subjectid")
-
-#################################################################
-meanstrial1to10BQ2RT <- data.frame()
-uniquesub <- unique(complete_BQ2$subjid)
-uniqueses <- unique(complete_BQ2$session_cond)
-
-for (i in uniquesub) {
-  for (x in uniqueses) {
-    temp <- dplyr::filter(complete_BQ2, complete_BQ2$subjid == i & complete_BQ2$session_cond == x)
-  meanstrial1to10BQ2RT[i, x] <- mean(temp$rt, na.rm = TRUE)
-    
-  }
-
-}
-meanstrial1to10BQ2RT$subjectid <- row.names(meanstrial1to10BQ2RT)
-meanstrial1to10BQ2RT <- melt(meanstrial1to10BQ2RT, id.vars = "subjectid")
-########################################################################
-
-
-meanstrial1to10WQ2RT <- data.frame()
-uniquesub <- unique(complete_WQ2$subjid)
-uniqueses <- unique(complete_WQ2$session_cond)
-
-for (i in uniquesub) {
-  for (x in uniqueses) {
-    temp <- dplyr::filter(complete_WQ2, complete_WQ2$subjid == i & complete_WQ2$session_cond == x)
-  meanstrial1to10WQ2RT[i, x] <- mean(temp$rt, na.rm = TRUE)
-    
-  }
-
-}
-meanstrial1to10WQ2RT$subjectid <- row.names(meanstrial1to10WQ2RT)
-meanstrial1to10WQ2RT <- melt(meanstrial1to10WQ2RT, id.vars = "subjectid")
 ```
 
 
 
-
-
-
-
-#5. Plotting the data 
+##4.6 Difference in block effects in conditions separately
 ```{r}
+# NOTE: in prev. model, found that block effect depends on condition, so modeling them here separately
 
-## 5.1. Plotting data for interoception
-### 5.1.1. Plotting BQ1
+# Conditions (session_cond)
+condition <- 'lps'
+# condition <- 'pl'
+# condition <- 'morninglps'
+# condition <- 'morningpl'
 
-##### Creating the comparisons for the t-test during plotting
-mycomparisons <- list(c("lps", "lpsmorning"), c("pl", "plmorning"), c("lps", "plmorning"), c ("lpsmorning", "pl"), c("lps", "pl"), c("lpsmorning", "plmorning"))
+df_allconds <- merged_all_sessions # interoception and exteroception
+df <- data.frame(dplyr::filter(df_allconds, df_allconds$session_cond == condition))
 
+# Modify the model to focus on block and condition interaction
+model <- lmer(rt ~ block + (1 | subjid), data = df)
 
-plotBQ1 <- ggplot(complete_BQ1, aes(x = session_cond, y = resp_re, fill=session_cond)) +
-  geom_bar(position = "dodge", width = 0.5, stat = "summary", fun = "mean")  +
-  stat_summary(fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  scale_fill_manual(values = c("lightcyan2", "lightblue3", "lightcyan", "lightblue4")) +
-  theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank()) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(2.7, 2.85, 3, 3.15, 3.3, 3.45)) +
-  ylab("Mean response") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ylim(0,3.6)
+# Summary of the model
+summary(model_block_condition)
 
-ggsave("interoception_BQ1.png", dpi = 300, width = 6, height = 9)
+# # Post-hoc comparisons: contrast block effects across conditions
+# emm <- emmeans(model_block_condition, ~ block | session_cond, pbkrtest.limit = 3843)
+# 
+# # Pairwise comparison of block effects across conditions
+# pairs(emm)
 
+# run ANOVA on model to see significance of the residuals
+anova(model)
 
+```
 
-### 5.1.2. Plotting BQ2
+#4.6.1 Plot subjects' trajectories over time for all conditions
+```
+Measures to Plot:
+  - reaction time (rt)
+  - accuracy (acc)
+  - response (resp)
+  - correct response (cresp)
+  
+Don't Plot
+  - response reverse-coded (resp_re)
+  - correct response reverse-coded (cresp_re)
+  
+NOTES:
+  - BQ1: How strong did you feel your body?
+  - BQ2: How difficult was it to focus on your body?
+  - WQ1: How many times was the word mirrored? >> only question to which accuracy applies
+  - WQ2: How difficult was it to count the times the word was mirrored?
 
-plotBQ2 <- ggplot(complete_BQ2, aes(x = session_cond, y = resp_re, fill=session_cond)) +
-  geom_bar(position = "dodge", width = 0.5, stat = "summary", fun = "mean")  +
-  stat_summary(fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  scale_fill_manual(values = c("lightcyan2", "lightblue3", "lightcyan", "lightblue4")) +
-  theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank()) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(2.7, 2.85, 3, 3.15, 3.3, 3.45)) +
-  ylab("Mean response") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ylim(0,3.6)
-
-ggsave("interoception_BQ2.png", dpi = 300, width = 6, height = 9)
-
-
-
-
-## 5.2. Plotting data for exteroception
-### 5.2.1. Plotting WQ1
-
-plotWQ1 <- ggplot(complete_WQ1, aes(x = session_cond, y = resp_re, fill=session_cond)) +
-  geom_bar(position = "dodge", width = 0.5, stat = "summary", fun = "mean")  +
-  stat_summary(fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  scale_fill_manual(values = c("lavenderblush2", "plum1", "hotpink", "lightpink2")) +
-  theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank()) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(2.7, 2.85, 3, 3.15, 3.3, 3.45)) +
-  ylab("Mean response") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ylim(0,3.6)
-
-ggsave("exteroception_WQ1.png", dpi = 300, width = 6, height = 9)
-
-
-
-### 5.2.2. Plotting WQ2
-
-plotWQ2 <- ggplot(complete_WQ2, aes(x = session_cond, y = resp_re, fill=session_cond)) +
-  geom_bar(position = "dodge", width = 0.5, stat = "summary", fun = "mean")  +
-  stat_summary(fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  scale_fill_manual(values = c("lavenderblush2", "plum1", "hotpink", "lightpink2")) +
-  theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank()) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(2.5, 2.65, 2.8, 2.95, 3.1, 3.25)) +
-  ylab("Mean response") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ylim(0,3.4)
-
-ggsave("exteroception_WQ2.png", dpi = 300, width = 6, height = 9)
-
-
-## 5.3 Combining all graphs
-
-ggarrange(plotBQ1, plotBQ2, plotWQ1, plotWQ2, labels = c("Int BQ1", "Int BQ2", "Ext WQ1", "Ext WQ2"), font.label = list(size=12, face = "plain"))
-ggsave("oversight.png", dpi = 300, height = 12, width = 10)
-
-
-################################################# REACTION TIME AND ACCURACY
-
-### 5.4 Plotting WQ1 reaction time
-
-plotrt <- ggplot(data = complete_WQ1, aes(x = session_cond, y = rt, group = session_cond, color = subjid)) +
-  theme(panel.background  = element_rect(fill  = "grey99")) +
-  geom_point(data = meanstrial1to10, aes(x = variable, y = value, group = variable, color = subjectid))  +
-  geom_path(data = meanstrial1to10, aes(x = variable, y = value, group  = subjectid, color = subjectid)) +
-  stat_summary(data =complete_WQ1, aes(x = session_cond, y = rt, group = session_cond), fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  #stat_summary(data = meanstrial1to10$value, fun.data = mean, width = 0.3, show.legend = TRUE) +
-  scale_color_hue(h = c(0,90), l = 98) +
-  #theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank()) +
-  stat_summary(data =complete_WQ1, aes(x = session_cond, y = rt, group = session_cond), fun="mean",shape=24,fill="white", show.legend = TRUE) +
-  ylab("Reaction time in sec") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ggtitle("Reaction time WQ1") +
-  theme(text = element_text(family = "AppleGothic")) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(1.5, 1.6, 1.7, 1.8, 1.9, 2), tip.length = 0, bracket.size = 0.5, color = "grey30")
-
-ggsave("RT_WQ1.png", dpi = 300, width = 8, height = 6) 
-
-
-### 5.4 Plotting WQ1 accuracy
-
-plotacc <-ggplot(data = complete_WQ1, aes(x = session_cond, y = acc*100, group = session_cond, color = subjid)) +
-  theme(panel.background  = element_rect(fill  = "grey99")) +
-  geom_point(data = meanstrial1to10_acc, aes(x = variable, y = value*100, group = variable, color = subjectid))  +
-  geom_path(data = meanstrial1to10_acc, aes(x = variable, y = value*100, group  = subjectid, color = subjectid)) +
-  #geom_path(aes(x = variable, y = value*100, group = subjectid)) +
-  stat_summary(data =complete_WQ1, aes(x = session_cond, y = acc*100, group = session_cond), fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  #stat_summary(data = meanstrial1to10$value, fun.data = mean, width = 0.3, show.legend = TRUE) +
-  scale_color_hue(h = c(0,90), l = 98) +
-  #theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank()) +
-  stat_summary(data =complete_WQ1, aes(x = session_cond, y = acc*100, group = session_cond), fun="mean",shape=24,fill="white", show.legend = TRUE)  +
-  ylab("Accuracy in %") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ggtitle("Accuracy WQ1") +
-  theme(text = element_text(family = "AppleGothic")) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(50, 45, 40, 35, 30, 25), tip.length = 0, bracket.size = 0.5, color = "grey30") 
 
   
-
-ggsave("ACC_WQ1.png", dpi = 300, width = 8, height = 6) 
-
-ggarrange(plotrt, plotacc)
-
+```
+```{r}
+merged_BQ2_WQ2 <- rbind(complete_BQ2, complete_WQ2) # merge and save
 
 
+df <- merged_BQ2_WQ2 # this will be overwritten if you rerun this for different questions
+# measure <- resp # measure you want to plot (resp, cresp, rt, acc)
+m_string <- "Response (Higher = more difficult" # string describing the measure for plot titles and labels
 
-ggsave("ACC_RT_WQ1.png", dpi = 300, width = 9, height = 5)
+plot_title <- glue('Task (Intero- and Exteroception) Difficulty Over Blocks')
 
+# # Create a plot with each subject's trajectory across blocks, faceted by condition
+# ggplot(df, aes(x = block, y = rt, group = subjid, color = subjid)) +
+#   geom_line() +  # plot a line for each subject
+#   geom_point() +  # add points at each block for each subject
+#   facet_wrap(~ session_cond) +  # create a separate panel for each condition
+#   theme_minimal() +  # use a minimal theme
+#   labs(title = "Subject Accuracy Over Blocks Across Conditions",
+#        x = "Block",
+#        y = "Accuracy") +
+#   theme(legend.position = "none")  # hide legend
 
-plotrt_BQ1 <- ggplot(data = complete_BQ1, aes(x = session_cond, y = rt, group = session_cond, color = subjid)) +
-  theme(panel.background  = element_rect(fill  = "grey99")) +
-  geom_point(data = meanstrial1to10BQ1RT, aes(x = variable, y = value, group = variable, color = subjectid))  +
-  geom_path(data = meanstrial1to10BQ1RT, aes(x = variable, y = value, group  = subjectid, color = subjectid)) +
-  stat_summary(data =complete_BQ1, aes(x = session_cond, y = rt, group = session_cond), fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  #stat_summary(data = meanstrial1to10$value, fun.data = mean, width = 0.3, show.legend = TRUE) +
-  scale_color_hue(h = c(0,90), l = 98) +
-  #theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank()) +
-  stat_summary(data =complete_BQ1, aes(x = session_cond, y = rt, group = session_cond), fun="mean",shape=24,fill="white", show.legend = TRUE) +
-  ylab("Reaction time in sec") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ggtitle("Reaction time BQ1") +
-  theme(text = element_text(family = "AppleGothic")) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(1, 1.1, 1.2, 1.3, 1.4, 1.5), tip.length = 0, bracket.size = 0.5, color = "grey30")
+# Calculate average measure for each block and condition
+# TRY PLOTTING STDD -> see if ppl's perception of difficulty changes in a pattern
+avg_data <- df %>%
+  group_by(session_cond, block) %>%
+  summarise(avg = sd(resp, na.rm=TRUE)) # add param to ignore NaNs
+  # summarise(avg = mean(resp, na.rm=TRUE)) # add param to ignore NaNs
 
-ggsave("RT_BQ1.png", dpi = 300, width = 6, height = 8) 
+# Plot subject trajectories and average lines
+ggplot() +
+  # Plot individual subject trajectories with transparency
+  geom_line(data = df, aes(x = block, y = resp, group = subjid, 
+            color = subjid), alpha = 0.3) +  # make subject lines more transparent (modulate alpha)
+  
+  # Plot points for subject data (may remove later)
+  geom_point(data = df, aes(x = block, y = resp, group = subjid,
+             color = subjid), alpha = 0.3) +   # make subject points more transparent
+  
+  # Plot average trajectory for each condition in black
+  geom_line(data = avg_data, aes(x = block, y = avg), color = "black", size = .75) +  # black average line
+  geom_point(data = avg_data, aes(x = block, y = avg), color = "black", size = 1) +  # points on average line
+  
+  # Facet by condition (in R, a 'facet' is a figure panel)
+  facet_wrap(~ session_cond) +
+  
+  # Labels and theme
+  theme_minimal() +
+  labs(title = plot_title,
+       x = "Block",
+       y = m_string) +
+  theme(legend.position = "none")  # No legend for subjects
 
+ggsave <- function(..., bg = 'white') ggplot2::ggsave(..., bg = bg)
+ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/block_effects_results/BQ2_WQ2_resp_change_sd.png')
 
-
-
-plotrt_BQ2 <- ggplot(data = complete_BQ2, aes(x = session_cond, y = rt, group = session_cond, color = subjid)) +
-  theme(panel.background  = element_rect(fill  = "grey99")) +
-  geom_point(data = meanstrial1to10BQ2RT, aes(x = variable, y = value, group = variable, color = subjectid))  +
-  geom_path(data = meanstrial1to10BQ2RT, aes(x = variable, y = value, group  = subjectid, color = subjectid)) +
-  stat_summary(data =complete_BQ2, aes(x = session_cond, y = rt, group = session_cond), fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  #stat_summary(data = meanstrial1to10$value, fun.data = mean, width = 0.3, show.legend = TRUE) +
-  scale_color_hue(h = c(0,90), l = 98) +
-  #theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank()) +
-  stat_summary(data =complete_BQ2, aes(x = session_cond, y = rt, group = session_cond), fun="mean",shape=24,fill="white", show.legend = TRUE) +
-  ylab("Reaction time in sec") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ggtitle("Reaction time BQ2") +
-  theme(text = element_text(family = "AppleGothic")) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(0.5, 0.6, 0.7, 0.8, 0.9, 1), tip.length = 0, bracket.size = 0.5, color = "grey30")
-
-ggsave("RT_BQ2.png", dpi = 300, width = 6, height = 8) 
-
-
-
-
-
-plotrt_WQ2 <- ggplot(data = complete_WQ2, aes(x = session_cond, y = rt, group = session_cond, color = subjid)) +
-  theme(panel.background  = element_rect(fill  = "grey99")) +
-  geom_point(data = meanstrial1to10WQ2RT, aes(x = variable, y = value, group = variable, color = subjectid))  +
-  geom_path(data = meanstrial1to10WQ2RT, aes(x = variable, y = value, group  = subjectid, color = subjectid)) +
-  stat_summary(data =complete_WQ2, aes(x = session_cond, y = rt, group = session_cond), fun.data = mean_cl_normal, width = 0.3, geom = "errorbar", show.legend = TRUE) +
-  #stat_summary(data = meanstrial1to10$value, fun.data = mean, width = 0.3, show.legend = TRUE) +
-  scale_color_hue(h = c(0,90), l = 98) +
-  #theme_minimal() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank()) +
-  stat_summary(data =complete_WQ2, aes(x = session_cond, y = rt, group = session_cond), fun="mean",shape=24,fill="white", show.legend = TRUE) +
-  ylab("Reaction time in sec") +
-  xlab("Session") +
-  theme(legend.position = "none") +
-  ggtitle("Reaction time WQ2") +
-  theme(text = element_text(family = "AppleGothic")) +
-  stat_compare_means(comparisons = mycomparisons, method = "t.test", paired = TRUE, label = "p.signif", label.y = c(0.5, 0.6, 0.7, 0.8, 0.9, 1), tip.length = 0, bracket.size = 0.5, color = "grey30")
-
-ggsave("RT_WQ2.png", dpi = 300, width = 6, height = 8) 
 ```
 
-#6. Inference statistics
-```{r}
 
 ```
 
