@@ -217,7 +217,7 @@ merged_BQ2_WQ2 <- rbind(complete_BQ2, complete_WQ2) # merge and save
 
 df <- merged_BQ2_WQ2 # this will be overwritten if you rerun this for different questions
 # measure <- resp # measure you want to plot (resp, cresp, rt, acc)
-m_string <- "Response (Higher = more difficult" # string describing the measure for plot titles and labels
+m_string <- "Response (Higher = more difficult)" # string describing the measure for plot titles and labels
 
 plot_title <- glue('Task (Intero- and Exteroception) Difficulty Over Blocks')
 
