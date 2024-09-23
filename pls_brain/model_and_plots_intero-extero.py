@@ -1,14 +1,11 @@
-# Mixed Effects Linear Model with Repeated Measures for LPS Brain Scores
+# Mixed Effects Linear Model with Repeated Measures: Intero- vs. Exteroception Mean-Centered PLS Brain Scores
 
-# Updated 2024-09-04
+# Updated 2024-09-19
 # Created 2024-08-06
 
 # DESCRIPTION
-  # model interoception ~ exteroception cluster scores (and/or brain scores) with repeated measures (blocks)
-
-# NEXT: troubleshooting "ConvergenceWarning: Maximum Liklihood optimization failed to converge"
-  # try making conditions 0 and 1 (integers instead of pandas objects)
-  # input needs to be one df with a column of the brainscores for intero, and another for extero
+    # models interoception ~ exteroception cluster scores (and/or brain scores) with repeated measures (blocks)
+    # plots subjects' brainscores (for one LV) over time, then the averages per condition in a 3-panel figure (requires you to input error margins from PLS reports)
 
 # %% Load python pkgs and set paths
 import os
