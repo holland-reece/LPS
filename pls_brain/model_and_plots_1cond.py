@@ -184,11 +184,11 @@ plt.show()
 # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
 conditions = df['condition'].unique()  # Define conditions
 
-# y_error = np.array([2.1767, 2.8459]) # get from SPAT report BSR range
-
-# # drop one subject row
-# i = df[(df.subjID == 'sub-105')].index
-# df = df.drop(i)
+# Get upper and lower confidence interval bounds for each block
+blocks = df['block'].unique()
+for b in blocks:
+    ci_up = df[df['block']==b][f'{lv_data}_ci_up'].iloc[0] # upper bound
+    ci_ll = df[df['block']==b][f'{lv_data}_ci_ll'].iloc[0] # lower bound
 
 # fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))  # Initiate figure with 3 panels
@@ -242,7 +242,7 @@ for condition in conditions:
         condstring = 'Exteroception'
 
     df_cond = df[df['condition'] == condition]
-    mean_dfc = df_cond.groupby('block', as_index=False)[lv_data].median()
+    mean_dfc = df_cond.groupby('block', as_index=False)[lv_data].mean()
     ax.plot(mean_dfc['block'], mean_dfc[lv_data], marker='o', color='black', linewidth=2, label=condstring)
     # ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
 
@@ -251,7 +251,7 @@ for condition in conditions:
     ax.errorbar(mean_dfc['block'], mean_dfc[lv_data],yerr=y_err, color='black') # error bar markers
     ax.fill_between(mean_dfc['block'], mean_dfc[lv_data]-y_err[0,], mean_dfc[lv_data]+y_err[1,], color='cyan', alpha=0.3) # shaded error bars
 
-ax.set_title(f'{lv_data_string}: Interoception Median (BSR: {y_err[0][0]}, {y_err[1][0]})')
+ax.set_title(f'{lv_data_string}: Interoception Mean (CI: {y_err[0][0]}, {y_err[1][0]})')
 ax.set_xlabel('Block')
 ax.set_ylabel(f'{lv_data_string} average across subjects')
 ax.set_ylim([-65,45]) # set all y-axis limits to this range
@@ -260,108 +260,108 @@ ax.set_ylim([-65,45]) # set all y-axis limits to this range
 # Adjust the layout and show the plot
 plt.tight_layout()
 # plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1)) # define legend (lists subjects)
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_median.png') # save figure as PNG
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_CI.png') # save figure as PNG
 plt.show()
 
 # %% Plot positive and negative means separately (if this LV has significant BSR for both negative and positive)
-# lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
-conditions = df['condition'].unique()  # Define conditions
+# # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
+# conditions = df['condition'].unique()  # Define conditions
 
-# Get from SPAT report BSR range
-# y_error = np.array([2.1767, 2.8459])
-yerror_pos = np.array([2.12, 2.82])
-yerror_neg = np.array([2.11, 3.06]) # needs to be absolute value of the negative BSR range
+# # Get from SPAT report BSR range
+# # y_error = np.array([2.1767, 2.8459])
+# yerror_pos = np.array([2.12, 2.82])
+# yerror_neg = np.array([2.11, 3.06]) # needs to be absolute value of the negative BSR range
 
-# # drop one subject row
-# i = df[(df.subjID == 'sub-105')].index
-# df = df.drop(i)
+# # # drop one subject row
+# # i = df[(df.subjID == 'sub-105')].index
+# # df = df.drop(i)
 
-# fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
-fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))  # Initiate figure with 3 panels
+# # fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
+# fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))  # Initiate figure with 3 panels
 
-# Define the color palette
-palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
-colors = dict(zip(df['subjID'].unique(), palette))
+# # Define the color palette
+# palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
+# colors = dict(zip(df['subjID'].unique(), palette))
 
-# Plotting function with labels directly on lines and average lines for positive and negative values
-def plot_with_labels_avg(df, ax, title, lv_data, colors):
-    for subj in df['subjID'].unique():
-        subj_df = df[df['subjID'] == subj]
-        ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
+# # Plotting function with labels directly on lines and average lines for positive and negative values
+# def plot_with_labels_avg(df, ax, title, lv_data, colors):
+#     for subj in df['subjID'].unique():
+#         subj_df = df[df['subjID'] == subj]
+#         ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
 
-        # Label the line at the last data point
-        ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
-                fontsize=9, color=colors[subj], ha='left', va='center')
+#         # Label the line at the last data point
+#         ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
+#                 fontsize=9, color=colors[subj], ha='left', va='center')
 
-    # Calculate and plot the mean across subjects for each block
-    mean_df = df.groupby('block', as_index=False)[lv_data].mean()
-    print(mean_df)
-    ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+#     # Calculate and plot the mean across subjects for each block
+#     mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+#     print(mean_df)
+#     ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
 
-    # Calculate and plot the positive and negative means separately
-    # mean_positive_df = df[df[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
-    # mean_negative_df = df[df[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
-    # ax.plot(mean_positive_df['block'], mean_positive_df[lv_data], marker='o', color='blue', linewidth=2, linestyle='--', label='Positive Mean')
-    # ax.plot(mean_negative_df['block'], mean_negative_df[lv_data], marker='o', color='red', linewidth=2, linestyle='--', label='Negative Mean')
+#     # Calculate and plot the positive and negative means separately
+#     # mean_positive_df = df[df[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
+#     # mean_negative_df = df[df[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
+#     # ax.plot(mean_positive_df['block'], mean_positive_df[lv_data], marker='o', color='blue', linewidth=2, linestyle='--', label='Positive Mean')
+#     # ax.plot(mean_negative_df['block'], mean_negative_df[lv_data], marker='o', color='red', linewidth=2, linestyle='--', label='Negative Mean')
 
-    ax.set_title(title)
-    ax.set_xlabel('Block')
-    ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
-    ax.set_ylim([-65, 45]) # set all y-axis limits to this range
-    # ax.legend(loc='best')
+#     ax.set_title(title)
+#     ax.set_xlabel('Block')
+#     ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
+#     ax.set_ylim([-65, 45]) # set all y-axis limits to this range
+#     # ax.legend(loc='best')
 
-# Plot each condition separately
-for i, condition in enumerate(conditions):
-    
-    # Get labels for conditions
-    if condition == 0:
-        condstring = 'Interoception'
-    elif condition == 1:
-        condstring = 'Exteroception'
-
-    ax = axes[i]
-    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
-
-ax = axes[-1]
+# # Plot each condition separately
 # for i, condition in enumerate(conditions):
-for condition in conditions:
-
-    # Get labels for conditions
-    if condition == 0:
-        condstring = 'Interoception'
-    elif condition == 1:
-        condstring = 'Exteroception'
-
-    df_cond = df[df['condition'] == condition]
     
-    # Mean of positive and negative values
-    mean_pos_cond = df_cond[df_cond[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
-    mean_neg_cond = df_cond[df_cond[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
+#     # Get labels for conditions
+#     if condition == 0:
+#         condstring = 'Interoception'
+#     elif condition == 1:
+#         condstring = 'Exteroception'
 
-    # Plot positive and negative mean lines
-    ax.plot(mean_pos_cond['block'], mean_pos_cond[lv_data], marker='o', color='blue', linewidth=2, label=f'Positive Mean ({condstring})')
-    ax.plot(mean_neg_cond['block'], mean_neg_cond[lv_data], marker='o', color='red', linewidth=2, label=f'Negative Mean ({condstring})')
+#     ax = axes[i]
+#     plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
 
-    # add error bar for the positive mean
-    yerr_pos = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_pos).transpose()
-    ax.errorbar(mean_pos_cond['block'], mean_pos_cond[lv_data], yerr=yerr_pos, color='blue', fmt='o', capsize=3) # error bar markers
-    ax.fill_between(mean_pos_cond['block'], mean_pos_cond[lv_data] - yerr_pos[0], mean_pos_cond[lv_data] + yerr_pos[1], color='blue', alpha=0.2) # shaded error bars for positive mean
+# ax = axes[-1]
+# # for i, condition in enumerate(conditions):
+# for condition in conditions:
 
-    # add error bar for the negative mean
-    yerr_neg = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_neg).transpose()
-    ax.errorbar(mean_neg_cond['block'], mean_neg_cond[lv_data], yerr=yerr_neg, color='red', fmt='o', capsize=3) # error bar markers
-    ax.fill_between(mean_neg_cond['block'], mean_neg_cond[lv_data] - yerr_neg[0], mean_neg_cond[lv_data] + yerr_neg[1], color='red', alpha=0.2) # shaded error bars for negative mean
+#     # Get labels for conditions
+#     if condition == 0:
+#         condstring = 'Interoception'
+#     elif condition == 1:
+#         condstring = 'Exteroception'
 
-ax.set_title(f'{lv_data_string}: Positive and Negative Means')
-ax.set_xlabel('Block')
-ax.set_ylabel(f'{lv_data_string} average across subjects')
-ax.set_ylim([-65, 45]) # set all y-axis limits to this range
-ax.legend()
+#     df_cond = df[df['condition'] == condition]
+    
+#     # Mean of positive and negative values
+#     mean_pos_cond = df_cond[df_cond[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
+#     mean_neg_cond = df_cond[df_cond[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
 
-# Adjust the layout and show the plot
-plt.tight_layout()
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_pos_neg_means.png') # save figure as PNG
-plt.show()
+#     # Plot positive and negative mean lines
+#     ax.plot(mean_pos_cond['block'], mean_pos_cond[lv_data], marker='o', color='blue', linewidth=2, label=f'Positive Mean ({condstring})')
+#     ax.plot(mean_neg_cond['block'], mean_neg_cond[lv_data], marker='o', color='red', linewidth=2, label=f'Negative Mean ({condstring})')
+
+#     # add error bar for the positive mean
+#     yerr_pos = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_pos).transpose()
+#     ax.errorbar(mean_pos_cond['block'], mean_pos_cond[lv_data], yerr=yerr_pos, color='blue', fmt='o', capsize=3) # error bar markers
+#     ax.fill_between(mean_pos_cond['block'], mean_pos_cond[lv_data] - yerr_pos[0], mean_pos_cond[lv_data] + yerr_pos[1], color='blue', alpha=0.2) # shaded error bars for positive mean
+
+#     # add error bar for the negative mean
+#     yerr_neg = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_neg).transpose()
+#     ax.errorbar(mean_neg_cond['block'], mean_neg_cond[lv_data], yerr=yerr_neg, color='red', fmt='o', capsize=3) # error bar markers
+#     ax.fill_between(mean_neg_cond['block'], mean_neg_cond[lv_data] - yerr_neg[0], mean_neg_cond[lv_data] + yerr_neg[1], color='red', alpha=0.2) # shaded error bars for negative mean
+
+# ax.set_title(f'{lv_data_string}: Positive and Negative Means')
+# ax.set_xlabel('Block')
+# ax.set_ylabel(f'{lv_data_string} average across subjects')
+# ax.set_ylim([-65, 45]) # set all y-axis limits to this range
+# ax.legend()
+
+# # Adjust the layout and show the plot
+# plt.tight_layout()
+# plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_pos_neg_means.png') # save figure as PNG
+# plt.show()
 
 
 # %% Plot ANOVA results
