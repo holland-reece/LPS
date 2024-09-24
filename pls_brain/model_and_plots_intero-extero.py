@@ -12,17 +12,24 @@ import os
 import subprocess
 import numpy as np
 import pandas as pd
-# import seaborn as sns
 import matplotlib.pyplot as plt
 import seaborn as sns
-import statsmodels.formula.api as smf
-import re
+import statsmodels.formula.api as smf # for glm/mixed-effects models
+import re # for sorting values from the CSV
+
+# for ANOVA
+# import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import AnovaRM
+
+# to calculate 95% CI for plotting
+from scipy import stats
 
 
 # Set paths
-spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16' # dir of the matlab SPAT results
-scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/pl_intero-extero_allblocks_n16'
+spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
+scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_intero-extero_allblocks'
 
 # spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
 # scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
@@ -37,9 +44,9 @@ if os.path.isdir(savedir)==False:
 df_init = pd.read_csv(scores_csv, sep=',', header=0)
 df_init.set_index('filename', inplace=True)
 
-# Define conditions as integers
-interoception = 0
-exteroception = 1
+# # Define conditions as integers
+# interoception = 0
+# exteroception = 1
 
 # %% Reshape the df_init to include only brain scores or clusters; leave out paths and groups (groups column is all ones)
 
@@ -51,12 +58,12 @@ df_reshape.rename(columns={'condition': 'condition_block'}, inplace=True) # rena
 
 # Extract condition and block using regex
 def parse_condition_block(condition_block):
-  match = re.match(r'mean_(\w+)_block(\d+)_pl', condition_block)
-  # match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
+#   match = re.match(r'mean_(\w+)_block(\d+)_pl', condition_block)
+  match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
   if match:
       condition = match.group(1)
       block = int(match.group(2))
-      print(f"{condition}, {block}") # TEST
+    #   print(f"{condition}, {block}") # TEST
       return condition, block
   else:
     return None, None
@@ -67,8 +74,8 @@ df_reshape = df_reshape.drop('condition_block', axis=1) # now condition and bloc
 df_reshape = df_reshape[['subjID', 'condition', 'block'] + [ c for c in df_reshape if c not in ['subjID', 'condition', 'block']]] # move condition and block cols to left
 
 # Replace condition names (pandas objects) with integers 0 and 1
-df_reshape.replace('interoception', interoception, inplace=True)
-df_reshape.replace('exteroception', exteroception, inplace=True)
+df_reshape.replace('interoception', 0, inplace=True)
+df_reshape.replace('exteroception', 1, inplace=True)
 
 # %% Define and fit the model
 lv_data = 'bs_lv1' # specify brain score or latent variable you want to model
@@ -86,14 +93,9 @@ print(result.summary())
 
 
 # %% 1-way ANOVA
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
-from statsmodels.stats.anova import AnovaRM
-
-lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
 
 # Don't need condition here (only have one)
-df = pd.concat([df_reshape['subjID'], df_reshape['block'], df_reshape[lv_data]], axis=1)
+df = pd.concat([df['subjID'], df_reshape['block'], df_reshape[lv_data]], axis=1)
 
 # If using repeated measures ANOVA (AnovaRM) with subject as a random effect:
 anova_rm = AnovaRM(df, depvar=lv_data, subject='subjID', within=['block'])
@@ -224,19 +226,17 @@ plt.show()
 
 
 # %% Plot trajectories of subjects' cluster/brain scores over blocks with average line
-# Recreate above 3-panel plot, but show the averaged line across subjects
-# lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
+
+# remove one subject (if range is causing plotting error)
+df.drop(df[df['subjID']=='sub-105'].index, inplace=True)
+
+# manually set y-axis range if necessary
+y_limits = [-80, 30]
+
 conditions = df['condition'].unique()  # Define conditions
 
-y_error = np.array([2.1767, 2.8459]) # get from SPAT report BSR range
-
-# # drop one subject row
-# i = df[(df.subjID == 'sub-105')].index
-# df = df.drop(i)
-
-# fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
 fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(24, 8))  # Initiate figure with 3 panels
-
+# fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(3, 1))  # Adjust the figure size to avoid error
 
 # Define the color palette
 palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
@@ -254,14 +254,12 @@ def plot_with_labels_avg(df, ax, title, lv_data, colors):
 
     # Calculate and plot the mean across subjects for each block
     mean_df = df.groupby('block', as_index=False)[lv_data].mean()
-    print(mean_df)
     ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
 
     ax.set_title(title)
     ax.set_xlabel('Block')
-    ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
-    ax.set_ylim([-65,45]) # set all y-axis limits to this range
-    # ax.legend(loc='best')
+    ax.set_ylabel(f'{lv_data_string}')
+    ax.set_ylim(y_limits)  # Set all y-axis limits to this range
 
 # Plot each condition separately
 for i, condition in enumerate(conditions):
@@ -273,74 +271,35 @@ for i, condition in enumerate(conditions):
         condstring = 'Exteroception'
 
     ax = axes[i]
-    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
+    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring}", lv_data, colors)
 
-# # Plot one condition only
-# condition = 1
-# condstring = 'Interoception'
-# ax = axes[1]
-# plot_with_labels_avg(df[df['condition'] == condition], axes, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
-
-# Plot only mean lines on last panel
-mean_colors = ['red', 'blue']
+# Plot only the overall mean with 95% CI on the last panel
 ax = axes[-1]
-# for i, condition in enumerate(conditions):
-for condition in conditions:
 
-    # Get labels for conditions
-    if condition == 0:
-        condstring = 'Interoception'
-    elif condition == 1:
-        condstring = 'Exteroception'
+# Calculate the mean and standard error of the mean (SEM) across all conditions
+mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+sem_df = df.groupby('block', as_index=False)[lv_data].sem()
 
-    df_cond = df[df['condition'] == condition]
-    mean_dfc = df_cond.groupby('block', as_index=False)[lv_data].mean()
-    ax.plot(mean_dfc['block'], mean_dfc[lv_data], marker='o', color=mean_colors[condition], linewidth=2, label=condstring)
-    # ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+# Calculate the 95% CI: mean ± 1.96 * SEM (for a 95% confidence interval)
+ci_up = mean_df[lv_data] + 1.96 * sem_df[lv_data]
+ci_low = mean_df[lv_data] - 1.96 * sem_df[lv_data]
 
-    # add error bar
-    y_err = np.multiply(np.ones([2,len(mean_dfc['block'])]).transpose(), y_error).transpose()
-    ax.errorbar(mean_dfc['block'], mean_dfc[lv_data],yerr=y_err, color=mean_colors[condition]) # error bar markers
-    ax.fill_between(mean_dfc['block'], mean_dfc[lv_data]-y_err[0,], mean_dfc[lv_data]+y_err[1,], color=mean_colors[condition], alpha=0.4) # shaded error bars
+# Plot the overall mean line
+ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, label='Mean')
 
-ax.set_title(f'Intero- vs. Exteroception Average Effects on {lv_data_string}')
+# Plot the 95% CI as a shaded region
+ax.fill_between(mean_df['block'], ci_low, ci_up, color='gray', alpha=0.4, label='95% CI')
+
+ax.set_title(f'Mean {lv_data_string} with 95% CI')
 ax.set_xlabel('Block')
-ax.set_ylabel(f'{lv_data_string} average across subjects')
-ax.set_ylim([-65,45]) # set all y-axis limits to this range
+ax.set_ylabel(f'{lv_data_string} mean across subjects')
+ax.set_ylim(y_limits)  # Set all y-axis limits to this range
 ax.legend()
 
-
-# # Plot the averaged trajectories in the last subplot
-# # df_avg = df.groupby(['subjID', 'block'], as_index=False)[lv_data].mean()
-# ax = axes[-1]
-# # plot_with_labels_avg(df_avg, ax, f'Intero- and Exteroception Averaged Effect on {lv_data_string}', lv_data, colors)
-# # Calculate and plot the mean across subjects for each block
-# mean_df = df.groupby('block', as_index=False)[lv_data].mean()
-# ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
-
-
-
 # Adjust the layout and show the plot
-plt.tight_layout()
-# plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1)) # define legend (lists subjects)
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg_err.png') # save figure as PNG
+# plt.tight_layout()
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_avg_err.png')  # Save figure as PNG
 plt.show()
 
-
-# %% Plot ANOVA results
-# Calculate means and standard errors for each block
-means = df.groupby('block')[lv_data].mean()
-errors = df.groupby('block')[lv_data].sem()
-
-# Create a bar plot
-plt.figure(figsize=(10, 6))
-plt.bar(means.index, means, yerr=errors, capsize=5, color='skyblue')
-
-# Add labels and title
-plt.xlabel('Block')
-plt.ylabel(f'{lv_data} Means and Standard Deviation')
-plt.title(f'Effect of Block on {lv_data}')
-plt.savefig(f'{savedir}/{lv_data}_effect_of_block_anova.png') # save figure as PNG
-plt.show()
 
 # %%
