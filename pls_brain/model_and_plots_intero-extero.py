@@ -27,13 +27,9 @@ from scipy import stats
 
 
 # Set paths
-spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
-scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_intero-extero_allblocks'
-
-# spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22' # dir of the matlab SPAT results
-# scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_lps_all_pls_1_n22_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
-# savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/lps_intero-extero_allblocks'
+spat_dir = f'/home/common/piaf/LPS_STHLM/analysis_2023/PLS/int_rs_denoised_newconds/1_ROIS/all_rois_n8_NVoxels2357/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16' # dir of the matlab SPAT results
+scores_csv = f'{spat_dir}/rmoutliers_20conds_meanInteroExtero_pl_all_pls_1_n16_extracted_mean_values.csv' # full path to brain scores/clusters/LVs CSV file
+savedir = '/home/common/piaf/LPS_STHLM/analysis_2023/PLS/mixed_effects_models_brainscores/pl_intero-extero_allblocks_n16'
 
 # Create results directory
 if os.path.isdir(savedir)==False:
@@ -58,8 +54,8 @@ df_reshape.rename(columns={'condition': 'condition_block'}, inplace=True) # rena
 
 # Extract condition and block using regex
 def parse_condition_block(condition_block):
-#   match = re.match(r'mean_(\w+)_block(\d+)_pl', condition_block)
-  match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
+  match = re.match(r'mean_(\w+)_block(\d+)_pl', condition_block)
+#   match = re.match(r'mean_(\w+)_block(\d+)_lps', condition_block)
   if match:
       condition = match.group(1)
       block = int(match.group(2))
@@ -78,8 +74,10 @@ df_reshape.replace('interoception', 0, inplace=True)
 df_reshape.replace('exteroception', 1, inplace=True)
 
 # %% Define and fit the model
-lv_data = 'bs_lv1' # specify brain score or latent variable you want to model
-lv_data_string = 'Brainscore LV1' # string for titles and plot headers and such
+# lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
+# lv_data_string = 'Brainscore LV3' # string for titles and plot headers and such
+lv_data = 'lv1_thp2n2_cluster2'
+lv_data_string = 'LV1 Cluster 2: Right Mid Cingulate (thr +/-2)'
 
 df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
 
@@ -231,7 +229,7 @@ plt.show()
 df.drop(df[df['subjID']=='sub-105'].index, inplace=True)
 
 # manually set y-axis range if necessary
-y_limits = [-80, 30]
+y_limits = [-1.1, 1.2]
 
 conditions = df['condition'].unique()  # Define conditions
 
