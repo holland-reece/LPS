@@ -12,11 +12,19 @@ import os
 import subprocess
 import numpy as np
 import pandas as pd
-# import seaborn as sns
 import matplotlib.pyplot as plt
 import seaborn as sns
-import statsmodels.formula.api as smf
-import re
+import statsmodels.formula.api as smf # for glm/mixed-effects models
+import re # for sorting values from the CSV
+
+# for ANOVA
+# import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import AnovaRM
+
+# to calculate 95% CI for plotting
+from scipy import stats
+
 
 
 # Set paths
@@ -76,10 +84,17 @@ df_reshape.replace('interoception', interoception, inplace=True)
 df_reshape.replace('exteroception', exteroception, inplace=True)
 
 # %% Define and fit the model
-lv_data = 'bs_lv2' # specify brain score or latent variable you want to model
-lv_data_string = 'Brainscore LV2' # string for titles and plot headers and such
+# lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
+# lv_data_string = 'Brainscore LV3' # string for titles and plot headers and such
+lv_data = 'lv3_thp2n2_cluster2'
+lv_data_string = 'LV3 Cluster 2: Right Mid Cingulate (thr +/-2)'
 
-df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data], df_reshape[f'{lv_data}_ci_up'], df_reshape[f'{lv_data}_ci_ll']], axis=1)
+# If brainscore, also extract ci_up and ci_ll (lower and upper CI bounds)
+if 'bs' in lv_data:
+    df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data], df_reshape[f'{lv_data}_ci_up'], df_reshape[f'{lv_data}_ci_ll']], axis=1)
+# If cluster, there are no CI bounds saved in the CSV
+elif 'cluster' in lv_data:
+    df = pd.concat([df_reshape['subjID'], df_reshape['condition'], df_reshape['block'], df_reshape[lv_data]], axis=1)
 
 # Model cluster values as a function of 'condition' with random effects for 'subject' and 'block'
 model = smf.mixedlm(f"{lv_data} ~ block", df, groups=df["subjID"]) # acknowledges that effect of block on brainscores ~ conditions may differ between subjects
@@ -92,9 +107,6 @@ subprocess.run(f'echo "{result.summary()}" >> {savedir}/{lv_data}_model_summary.
 
 
 # %% 1-way ANOVA
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
-from statsmodels.stats.anova import AnovaRM
 
 # lv_data = 'bs_lv3' # specify brain score or latent variable you want to model
 
@@ -180,204 +192,122 @@ plt.show()
 
 
 # %% Plot trajectories of subjects' cluster/brain scores over blocks with average line
-# Recreate above 3-panel plot, but show the averaged line across subjects
-# lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
-conditions = df['condition'].unique()  # Define conditions
 
-# Get upper and lower confidence interval bounds for each block
+# Define the conditions and blocks
+conditions = df['condition'].unique()
 blocks = df['block'].unique()
-for b in blocks:
-    ci_up = df[df['block']==b][f'{lv_data}_ci_up'].iloc[0] # upper bound
-    ci_ll = df[df['block']==b][f'{lv_data}_ci_ll'].iloc[0] # lower bound
-
-# fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
-fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))  # Initiate figure with 3 panels
-
 
 # Define the color palette
 palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
 colors = dict(zip(df['subjID'].unique(), palette))
 
-# Plotting function with labels directly on lines and average line
-def plot_with_labels_avg(df, ax, title, lv_data, colors):
+# Functions --------------------------------------------------------------------------
+
+# Get dynamic y-axis limits based on min and max subject scores
+def get_y_axis_limits(df, lv_data):
+    min_val = df[lv_data].min()
+    max_val = df[lv_data].max()
+    return min_val - 5, max_val + 5  # Add a margin to the min/max for better visibility
+
+# Plotting function with upper and lower CI bounds and consistent y-axis limits
+def plot_with_CI(df, ax, title, lv_data, colors, y_limits):
+    # Plot each subject's trajectory
     for subj in df['subjID'].unique():
         subj_df = df[df['subjID'] == subj]
         ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
-
-        # Label the line at the last data point
         ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
                 fontsize=9, color=colors[subj], ha='left', va='center')
 
-    # Calculate and plot the mean across subjects for each block
+    # Plot the mean and confidence intervals across subjects for each block
     mean_df = df.groupby('block', as_index=False)[lv_data].mean()
-    print(mean_df)
+    ci_up = df.groupby('block')[f'{lv_data}_ci_up'].first().values
+    ci_ll = df.groupby('block')[f'{lv_data}_ci_ll'].first().values
+
     ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+
+    # Apply the consistent y-axis limits (based on overall max and min subject scores)
+    ax.set_ylim(y_limits)
 
     ax.set_title(title)
     ax.set_xlabel('Block')
-    ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
-    ax.set_ylim([-65,45]) # set all y-axis limits to this range
-    # ax.legend(loc='best')
+    ax.set_ylabel(f'{lv_data_string}')
 
-# Plot each condition separately
+# Plotting function without precalculated CIs, calculates 95% CIs
+def plot_no_CI(df, ax, title, lv_data, colors, y_limits):
+    # Plot each subject's trajectory
+    for subj in df['subjID'].unique():
+        subj_df = df[df['subjID'] == subj]
+        ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
+        ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
+                fontsize=9, color=colors[subj], ha='left', va='center')
+
+    # Calculate mean and 95% CI across each block
+    mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+    sem_df = df.groupby('block', as_index=False)[lv_data].sem()  # Standard error of the mean
+
+    # Calculate 95% confidence intervals (mean ± 1.96 * SEM)
+    ci_up = mean_df[lv_data] + 1.96 * sem_df[lv_data]
+    ci_ll = mean_df[lv_data] - 1.96 * sem_df[lv_data]
+
+    # Plot the mean line (don't plot shaded confidence interval here - too messy)
+    ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+    # ax.fill_between(mean_df['block'], ci_ll, ci_up, color='gray', alpha=0.3, label='95% CI')  # Shaded region
+
+    # Apply the consistent y-axis limits
+    ax.set_ylim(y_limits)
+
+    ax.set_title(title)
+    ax.set_xlabel('Block')
+    ax.set_ylabel(f'{lv_data_string}')
+
+# Code body --------------------------------------------------------------------------
+
+# Get y-axis limits based on the left panel (first condition)
+df_first_condition = df[df['condition'] == conditions[0]]
+y_limits = get_y_axis_limits(df_first_condition, lv_data)  # Max and min subject scores; used to set y-axes range for plot
+y_limits = [-1.3, 1.4] # manually set y-axis range if necessary
+
+# Initiate figure with 3 panels (2 for conditions, 1 for overall mean)
+fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))
+
+# Plot for each condition
 for i, condition in enumerate(conditions):
-    
-    # Get labels for conditions
-    if condition == 0:
-        condstring = 'Interoception'
-    elif condition == 1:
-        condstring = 'Exteroception'
-
+    condstring = 'Interoception' if condition == 0 else 'Exteroception'
     ax = axes[i]
-    plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
+    if 'bs' in lv_data:
+        plot_with_CI(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors, y_limits)
+    else:
+        plot_no_CI(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors, y_limits)
+
+# ----------------------------------------------------------------------------------
+# Plot the combined mean with calculated confidence intervals in the rightmost panel
+# ----------------------------------------------------------------------------------
 
 ax = axes[-1]
-# for i, condition in enumerate(conditions):
-for condition in conditions:
+all_mean_df = df.groupby('block', as_index=False)[lv_data].mean()
+all_sem_df = df.groupby('block', as_index=False)[lv_data].sem()  # Calculate SEM for all conditions
 
-    # Get labels for conditions
-    if condition == 0:
-        condstring = 'Interoception'
-    elif condition == 1:
-        condstring = 'Exteroception'
+# Calculate 95% CI for combined conditions
+ci_up_combined = all_mean_df[lv_data] + 1.96 * all_sem_df[lv_data]
+ci_ll_combined = all_mean_df[lv_data] - 1.96 * all_sem_df[lv_data]
 
-    df_cond = df[df['condition'] == condition]
-    mean_dfc = df_cond.groupby('block', as_index=False)[lv_data].mean()
-    ax.plot(mean_dfc['block'], mean_dfc[lv_data], marker='o', color='black', linewidth=2, label=condstring)
-    # ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
+# Plot the mean across conditions in black
+ax.plot(all_mean_df['block'], all_mean_df[lv_data], marker='o', color='black', linewidth=2, label='Combined Mean')
 
-    # add error bar
-    y_err = np.multiply(np.ones([2,len(mean_dfc['block'])]).transpose(), y_error).transpose()
-    ax.errorbar(mean_dfc['block'], mean_dfc[lv_data],yerr=y_err, color='black') # error bar markers
-    ax.fill_between(mean_dfc['block'], mean_dfc[lv_data]-y_err[0,], mean_dfc[lv_data]+y_err[1,], color='cyan', alpha=0.3) # shaded error bars
+# Plot the 95% CI shaded region
+ax.fill_between(all_mean_df['block'], ci_ll_combined, ci_up_combined, color='gray', alpha=0.3, label='95% CI')
 
-ax.set_title(f'{lv_data_string}: Interoception Mean (CI: {y_err[0][0]}, {y_err[1][0]})')
+# Apply consistent y-axis limits
+ax.set_ylim(y_limits)
+ax.set_title(f'{lv_data_string}: Mean across Conditions with CI')
 ax.set_xlabel('Block')
-ax.set_ylabel(f'{lv_data_string} average across subjects')
-ax.set_ylim([-65,45]) # set all y-axis limits to this range
-# ax.legend()
+ax.set_ylabel(f'{lv_data_string} mean across subjects')
+ax.legend()
 
-# Adjust the layout and show the plot
+# Adjust layout and save
 plt.tight_layout()
-# plt.legend(loc='best', ncol=2, bbox_to_anchor=(1, 1)) # define legend (lists subjects)
-plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_CI.png') # save figure as PNG
+plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_CI.png')
 plt.show()
 
-# %% Plot positive and negative means separately (if this LV has significant BSR for both negative and positive)
-# # lv_data_string = 'LV1 Cluster1 (threshold +/-2)'  # Choose a title for the brain score/cluster for plots
-# conditions = df['condition'].unique()  # Define conditions
-
-# # Get from SPAT report BSR range
-# # y_error = np.array([2.1767, 2.8459])
-# yerror_pos = np.array([2.12, 2.82])
-# yerror_neg = np.array([2.11, 3.06]) # needs to be absolute value of the negative BSR range
-
-# # # drop one subject row
-# # i = df[(df.subjID == 'sub-105')].index
-# # df = df.drop(i)
-
-# # fig, axes = plt.subplots(1, len(conditions), figsize=(6, 4))  # Initiate figure with one panel
-# fig, axes = plt.subplots(1, len(conditions) + 1, figsize=(16, 8))  # Initiate figure with 3 panels
-
-# # Define the color palette
-# palette = sns.color_palette("hls", n_colors=len(df['subjID'].unique()))
-# colors = dict(zip(df['subjID'].unique(), palette))
-
-# # Plotting function with labels directly on lines and average lines for positive and negative values
-# def plot_with_labels_avg(df, ax, title, lv_data, colors):
-#     for subj in df['subjID'].unique():
-#         subj_df = df[df['subjID'] == subj]
-#         ax.plot(subj_df['block'], subj_df[lv_data], marker='o', label=subj, color=colors[subj], alpha=0.6)
-
-#         # Label the line at the last data point
-#         ax.text(subj_df['block'].iloc[-1], subj_df[lv_data].iloc[-1], subj, 
-#                 fontsize=9, color=colors[subj], ha='left', va='center')
-
-#     # Calculate and plot the mean across subjects for each block
-#     mean_df = df.groupby('block', as_index=False)[lv_data].mean()
-#     print(mean_df)
-#     ax.plot(mean_df['block'], mean_df[lv_data], marker='o', color='black', linewidth=2, linestyle='--', label='Mean')
-
-#     # Calculate and plot the positive and negative means separately
-#     # mean_positive_df = df[df[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
-#     # mean_negative_df = df[df[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
-#     # ax.plot(mean_positive_df['block'], mean_positive_df[lv_data], marker='o', color='blue', linewidth=2, linestyle='--', label='Positive Mean')
-#     # ax.plot(mean_negative_df['block'], mean_negative_df[lv_data], marker='o', color='red', linewidth=2, linestyle='--', label='Negative Mean')
-
-#     ax.set_title(title)
-#     ax.set_xlabel('Block')
-#     ax.set_ylabel(f'{lv_data_string}') # maybe don't need y-axis label (model fitted values, i.e. y_hat based on intero/extero condition )
-#     ax.set_ylim([-65, 45]) # set all y-axis limits to this range
-#     # ax.legend(loc='best')
-
-# # Plot each condition separately
-# for i, condition in enumerate(conditions):
-    
-#     # Get labels for conditions
-#     if condition == 0:
-#         condstring = 'Interoception'
-#     elif condition == 1:
-#         condstring = 'Exteroception'
-
-#     ax = axes[i]
-#     plot_with_labels_avg(df[df['condition'] == condition], ax, f"{lv_data_string}: {condstring} Change Over Time", lv_data, colors)
-
-# ax = axes[-1]
-# # for i, condition in enumerate(conditions):
-# for condition in conditions:
-
-#     # Get labels for conditions
-#     if condition == 0:
-#         condstring = 'Interoception'
-#     elif condition == 1:
-#         condstring = 'Exteroception'
-
-#     df_cond = df[df['condition'] == condition]
-    
-#     # Mean of positive and negative values
-#     mean_pos_cond = df_cond[df_cond[lv_data] > 0].groupby('block', as_index=False)[lv_data].mean()
-#     mean_neg_cond = df_cond[df_cond[lv_data] < 0].groupby('block', as_index=False)[lv_data].mean()
-
-#     # Plot positive and negative mean lines
-#     ax.plot(mean_pos_cond['block'], mean_pos_cond[lv_data], marker='o', color='blue', linewidth=2, label=f'Positive Mean ({condstring})')
-#     ax.plot(mean_neg_cond['block'], mean_neg_cond[lv_data], marker='o', color='red', linewidth=2, label=f'Negative Mean ({condstring})')
-
-#     # add error bar for the positive mean
-#     yerr_pos = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_pos).transpose()
-#     ax.errorbar(mean_pos_cond['block'], mean_pos_cond[lv_data], yerr=yerr_pos, color='blue', fmt='o', capsize=3) # error bar markers
-#     ax.fill_between(mean_pos_cond['block'], mean_pos_cond[lv_data] - yerr_pos[0], mean_pos_cond[lv_data] + yerr_pos[1], color='blue', alpha=0.2) # shaded error bars for positive mean
-
-#     # add error bar for the negative mean
-#     yerr_neg = np.multiply(np.ones([2, len(mean_pos_cond['block'])]).transpose(), yerror_neg).transpose()
-#     ax.errorbar(mean_neg_cond['block'], mean_neg_cond[lv_data], yerr=yerr_neg, color='red', fmt='o', capsize=3) # error bar markers
-#     ax.fill_between(mean_neg_cond['block'], mean_neg_cond[lv_data] - yerr_neg[0], mean_neg_cond[lv_data] + yerr_neg[1], color='red', alpha=0.2) # shaded error bars for negative mean
-
-# ax.set_title(f'{lv_data_string}: Positive and Negative Means')
-# ax.set_xlabel('Block')
-# ax.set_ylabel(f'{lv_data_string} average across subjects')
-# ax.set_ylim([-65, 45]) # set all y-axis limits to this range
-# ax.legend()
-
-# # Adjust the layout and show the plot
-# plt.tight_layout()
-# plt.savefig(f'{savedir}/{lv_data}_change_over_blocks_pos_neg_means.png') # save figure as PNG
-# plt.show()
-
-
-# %% Plot ANOVA results
-# # Calculate means and standard errors for each block
-# means = df.groupby('block')[lv_data].mean()
-# errors = df.groupby('block')[lv_data].sem()
-
-# # Create a bar plot
-# plt.figure(figsize=(10, 6))
-# plt.bar(means.index, means, yerr=errors, capsize=5, color='skyblue')
-
-# # Add labels and title
-# plt.xlabel('Block')
-# plt.ylabel(f'{lv_data} Means and Standard Deviation')
-# plt.title(f'Effect of Block on {lv_data}')
-# plt.savefig(f'{savedir}/{lv_data}_effect_of_block_anova.png') # save figure as PNG
-# plt.show()
 
 # %%
