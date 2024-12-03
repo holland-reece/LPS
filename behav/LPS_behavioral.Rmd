@@ -3,7 +3,7 @@
 
 ##### Edited by Holland Brown to plot effect of block (time) on behav scores
 
-##### Updated 2024-09-30
+##### Updated 2024-12-03
 ##### Created 2024-09-09
 
 ## Notes:
@@ -45,7 +45,7 @@ session_conditions <- read_excel("cond_ses_info.xlsx") # contains condition name
 ## 3.1. Merging the info from two datasets: Matching session number (e.g. "ses-01") to the condition (e.g. "plmorning")
 session_long <- melt(session_conditions, id.vars = c("subjectID", "anat", "pls", "group"), value.name = "session_cond", variable.name = "session_num") # change session info file to long format
 
-# Merge task_all_sessions, task_all_sessions_acc by matching subject ID, condition, reation time, session, and response
+# Merge task_all_sessions, task_all_sessions_acc by matching subject ID, condition, reaction time, session, and response
 merged_all_sessions_acc <- left_join(task_all_sessions, task_all_sessions_acc, by=join_by(subjid == subjid, cond == cond, rt == rt, session == session, resp == resp), relationship = "many-to-one", multiple = "first")
 
 # Merge the datasets based on matching subject IDs and session numbers in both datasets. Result is a merged dataset containing the session number and session condition
@@ -84,8 +84,8 @@ complete_WQ2 <- dplyr::filter(merged_exteWQ2, merged_exteWQ1$subjid != "sub-120"
 
 ##4.1 Effect of block on response with condition as a fixed effect and subject as a random effect
 ```{r}
-# df <- merged_exte # exteroception
-df <- merged_inter # interoception
+# df <- merged_exte # exteroception questions
+df <- merged_inter # interoception questions
 
 # Fit the model
 model <- lmer(resp ~ block * session_cond + (1 | subjid), data = df)
@@ -101,6 +101,193 @@ anova(model)
 
 
 ```
+
+```{r}
+# Predicted reaction times
+
+# Step 1: Fit Mixed-Effects Model (use from prev code block)
+# df <- merged_exte # exteroception questions
+df <- merged_interBQ2 # interoception questions
+
+# Fit the model
+model <- lmer(rt ~ block * session_cond + (1 | subjid), data = df)
+
+# Summary stats of the model
+summary(model)
+fixef(model) # Full table of fixed effects
+coef(summary(model)) # Full table of coefficients
+anova(model) # Full table from ANOVA test
+
+# Step 2: Generate Predictions ---------------------------------------------------
+# Create a new data frame for predictions over trials and conditions
+pred_data <- expand.grid(
+  block = 1:10,
+  session_cond = unique(df$session_cond)
+)
+
+# Add predictions from the model
+pred_data$pred_rt <- predict(model, newdata = pred_data, re.form = NA)  # re.form = NA excludes random effects
+
+# Step 3: Summarize Reaction Time Data -------------------------------------------
+summary_rt <- df %>%
+  group_by(session_cond, block) %>%
+  summarise(
+    mean_rt = mean(rt, na.rm = TRUE),
+    se_rt = sd(rt, na.rm = TRUE) / sqrt(n()),  # Standard error
+    lower_ci_rt = mean_rt - 1.96 * se_rt,      # Lower bound of 95% CI
+    upper_ci_rt = mean_rt + 1.96 * se_rt) %>%       # Upper bound of 95% CI
+  ungroup()
+
+# Step 4: Plot Reaction Time with Model Predictions -----------------------------
+plot_title_rt <- "BQ2 Predicted Reaction Time Over Trials"
+
+ggplot(pred_data, aes(x = block, y = pred_rt, color = session_cond, group = session_cond)) +
+  
+  # Plot the line for predicted values
+  geom_line(size = 1.2) +
+  
+  # Add points for each trial to highlight individual predicted values
+  geom_point(size = 2) +
+  
+  # Labels and theme adjustments
+  labs(title = plot_title_rt,
+       x = "Trials",
+       y = "Predicted Reaction Time (sec)") +
+  
+  # Customize x-axis for trial numbers
+  scale_x_continuous(breaks = 1:10) +
+  
+  theme_minimal() +
+  theme(legend.position = "right")  # Show legend if useful
+
+# Save the predicted response plot
+ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/BQ2_predicted_rt.png', bg = 'white')
+```
+
+```{r}
+# Predicted accuracy (WQ1 only)
+
+# Step 1: Fit Mixed-Effects Model (use from prev code block)
+# df <- merged_exte # exteroception questions
+df <- merged_exteWQ1 # interoception questions
+
+# Fit the model
+model <- lmer(acc ~ block * session_cond + (1 | subjid), data = df)
+
+# Summary stats of the model
+summary(model)
+fixef(model) # Full table of fixed effects
+coef(summary(model)) # Full table of coefficients
+anova(model) # Full table from ANOVA test
+
+# Step 2: Generate Predictions ---------------------------------------------------
+# Create a new data frame for predictions over trials and conditions
+pred_data <- expand.grid(
+  block = 1:10,
+  session_cond = unique(df$session_cond)
+)
+
+# Add predictions from the model
+pred_data$pred_acc <- predict(model, newdata = pred_data, re.form = NA)  # re.form = NA excludes random effects
+
+# Step 3: Summarize Reaction Time Data -------------------------------------------
+summary_resp <- df %>%
+  group_by(session_cond, block) %>%
+  summarise(
+    mean_resp = mean(acc, na.rm = TRUE),
+    se_resp = sd(acc, na.rm = TRUE) / sqrt(n()),  # Standard error
+    lower_ci_resp = mean_resp - 1.96 * se_resp,      # Lower bound of 95% CI
+    upper_ci_resp = mean_resp + 1.96 * se_resp) %>%       # Upper bound of 95% CI
+  ungroup()
+
+# Step 4: Plot Reaction Time with Model Predictions -----------------------------
+plot_title_resp <- "WQ1 Predicted Accuracy Over Trials"
+
+ggplot(pred_data, aes(x = block, y = pred_acc, color = session_cond, group = session_cond)) +
+  
+  # Plot the line for predicted values
+  geom_line(size = 1.2) +
+  
+  # Add points for each trial to highlight individual predicted values
+  geom_point(size = 2) +
+  
+  # Labels and theme adjustments
+  labs(title = plot_title_resp,
+       x = "Trials",
+       y = "Predicted Accuracy (0 for incorrect, 1 for correct)") +
+  
+  # Customize x-axis for trial numbers
+  scale_x_continuous(breaks = 1:10) +
+  
+  theme_minimal() +
+  theme(legend.position = "right")  # Show legend if useful
+
+# Save the predicted response plot
+ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/WQ1_predicted_acc.png', bg = 'white')
+```
+
+```{r}
+# Predicted responses (WQ2, BQ1, BQ2)
+
+# Step 1: Fit Mixed-Effects Model (use from prev code block)
+# df <- merged_exte # exteroception questions
+df <- merged_interBQ2 # interoception questions
+
+# Fit the model
+model <- lmer(resp ~ block * session_cond + (1 | subjid), data = df)
+
+# Summary stats of the model
+summary(model)
+fixef(model) # Full table of fixed effects
+coef(summary(model)) # Full table of coefficients
+anova(model) # Full table from ANOVA test
+
+# Step 2: Generate Predictions ---------------------------------------------------
+# Create a new data frame for predictions over trials and conditions
+pred_data <- expand.grid(
+  block = 1:10,
+  session_cond = unique(df$session_cond)
+)
+
+# Add predictions from the model
+pred_data$pred_resp <- predict(model, newdata = pred_data, re.form = NA)  # re.form = NA excludes random effects
+
+# Step 3: Summarize Reaction Time Data -------------------------------------------
+summary_resp <- df %>%
+  group_by(session_cond, block) %>%
+  summarise(
+    mean_resp = mean(resp, na.rm = TRUE),
+    se_resp = sd(resp, na.rm = TRUE) / sqrt(n()),  # Standard error
+    lower_ci_resp = mean_resp - 1.96 * se_resp,      # Lower bound of 95% CI
+    upper_ci_resp = mean_resp + 1.96 * se_resp) %>%       # Upper bound of 95% CI
+  ungroup()
+
+# Step 4: Plot Reaction Time with Model Predictions -----------------------------
+plot_title_resp <- "BQ2 Predicted Responses Over Trials"
+
+ggplot(pred_data, aes(x = block, y = pred_resp, color = session_cond, group = session_cond)) +
+  
+  # Plot the line for predicted values
+  geom_line(size = 1.2) +
+  
+  # Add points for each trial to highlight individual predicted values
+  geom_point(size = 2) +
+  
+  # Labels and theme adjustments
+  labs(title = plot_title_resp,
+       x = "Trials",
+       y = "Predicted Responses (range 1 to 4, higher value == felt more)") +
+  
+  # Customize x-axis for trial numbers
+  scale_x_continuous(breaks = 1:10) +
+  
+  theme_minimal() +
+  theme(legend.position = "right")  # Show legend if useful
+
+# Save the predicted response plot
+# ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/WQ2_predicted_resp.png', bg = 'white')
+```
+
 
 ##4.2 Effect of block on reaction time with condition as a fixed effect and subject as a random effect
 ```{r}
@@ -165,10 +352,10 @@ ggplot(df, aes(x = block, y = rt, color = session_cond)) +
 # NOTE: in prev. model, found that block effect depends on condition, so modeling them here separately
 
 # Conditions (session_cond)
-condition <- 'lps'
+# condition <- 'lps'
 # condition <- 'pl'
-# condition <- 'morninglps'
-# condition <- 'morningpl'
+# condition <- 'lpsmorning'
+condition <- 'plmorning'
 
 df_allconds <- merged_all_sessions # interoception and exteroception
 df <- data.frame(dplyr::filter(df_allconds, df_allconds$session_cond == condition))
@@ -189,6 +376,41 @@ summary(model_block_condition)
 anova(model)
 
 ```
+
+##4.6 Effect of condition on rt/resp/acc, etc. with block and subjectID as mixed effects
+# NOTE: cond == BQ1, BQ2, WQ1, or WQ2 (interoception questions or exteroception questions)
+```{r}
+# NOTE: in prev. model, found that block effect depends on condition, so modeling them here separately
+
+# Conditions (session_cond)
+condition <- 'lps'
+# condition <- 'pl'
+# condition <- 'lpsmorning'
+# condition <- 'plmorning'
+
+question <- 'BQ1'
+
+df_allconds <- merged_all_sessions_acc # interoception and exteroception
+df1 <- data.frame(dplyr::filter(df_allconds, df_allconds$session_cond == condition))
+df
+
+# Modify the model to focus on block and condition interaction
+model <- lmer(resp ~ cond * block + (1 | subjid), data = df)
+
+# Summary of the model
+summary(model)
+
+# Full table of fixed effects
+fixef(model)
+
+# Full table of coefficients
+coef(summary(model))
+
+# Full table from ANOVA test
+anova(model)
+
+```
+
 
 #4.6.1 Plot subjects' trajectories over time for all conditions
 ```
