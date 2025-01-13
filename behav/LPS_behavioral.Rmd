@@ -28,6 +28,7 @@ library(emmeans) # post-hoc comparisons
 
 # Other useful R packages
 library(glue) # lets me code sort of like I can with f-strings in Python (sort of)
+library(rlang) # need this for the := operator
 ```
 
 #2. Setting the working directory and importing behavioral data
@@ -51,11 +52,9 @@ merged_all_sessions_acc <- left_join(task_all_sessions, task_all_sessions_acc, b
 # Merge the datasets based on matching subject IDs and session numbers in both datasets. Result is a merged dataset containing the session number and session condition
 merged_all_sessions <- left_join(merged_all_sessions_acc, session_long, by=join_by(subjid == subjectID, session == session_num))
 
-
 ## 3.2. Recoding the labels (recode responses on the 4-point scale in the opposite direction)
 merged_all_sessions$resp_re <- car::recode(merged_all_sessions$resp, "1 = 4; 2 = 3; 3 = 2; 4 = 1")
 merged_all_sessions$cresp_re <- car::recode(merged_all_sessions$cresp, "1 = 4; 2 = 3; 3 = 2; 4 = 1")
-
 
 ## 3.3. Separating interoception and exteroception
 ### 3.3.1. Interoception: Separating BQ1 & BQ2
@@ -82,35 +81,167 @@ complete_WQ2 <- dplyr::filter(merged_exteWQ2, merged_exteWQ1$subjid != "sub-120"
 
 #4. Mixed effects linear models
 
-##4.1 Effect of block on response with condition as a fixed effect and subject as a random effect
+##4.1 Linear models: one question, one session at a time
 ```{r}
-# df <- merged_exte # exteroception questions
-df <- merged_inter # interoception questions
+# PURPOSE: these models can't be compared to one another bc random intercepts used to compensate for random effect will differ between models, however, it will show us if for some questions or sessions the effects are statistically significant
 
+savedir <- "/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/20241213_one_question_one_session_lmer"
+
+# Step 1: Fit Mixed-Effects Model (use from prev code block)
+#df1 <- merged_exteWQ2 # exteroception questions
+df1 <- merged_interBQ2 # interoception questions
+
+df_lps <- data.frame(dplyr::filter(df1, df1$session_cond == "lps")) # extract one session from df with one question
+df_lpsmorning <- data.frame(dplyr::filter(df1, df1$session_cond == "lpsmorning")) # extract one session from df with one question
+df_pl <- data.frame(dplyr::filter(df1, df1$session_cond == "pl")) # extract one session from df with one question
+df_plmorning <- data.frame(dplyr::filter(df1, df1$session_cond == "plmorning")) # extract one session from df with one question
+```
+```{r}
 # Fit the model
-model <- lmer(resp ~ block * session_cond + (1 | subjid), data = df)
+df <- df_plmorning # run one session at a time
+model <- lmer(resp ~ block + (1 | subjid), data = df)
 
-# Summary of the model
+# Summary stats of the model
 summary(model)
+fixef(model) # Full table of fixed effects
+coef(summary(model)) # Full table of coefficients
+anova(model) # Full table from ANOVA test
 
-# Check residuals
-# plot(model)
+# Step 2: Generate Predictions ---------------------------------------------------
+# Create a new data frame for predictions over trials and conditions
+pred_data <- expand.grid(
+  block = 1:10,
+  session_cond = unique(df$session_cond)
+)
 
-# Perform ANOVA to check significance of terms
-anova(model)
+# Add predictions from the model
+pred_data$pred <- predict(model, newdata = pred_data, re.form = NA)  # re.form = NA excludes random effects
 
+# Step 3: Summarize Reaction Time Data -------------------------------------------
+summary <- df %>%
+  group_by(session_cond, block) %>%
+  summarise(
+    mean = mean(acc, na.rm = TRUE),
+    se = sd(acc, na.rm = TRUE) / sqrt(n()),  # Standard error
+    lower_ci = mean - 1.96 * se,      # Lower bound of 95% CI
+    upper_ci = mean + 1.96 * se) %>%       # Upper bound of 95% CI
+  ungroup()
 
 ```
 
+##4.1 Effect of block on reaction time, response, and accuracy with condtion, time of day, and (condition * time) as fixed effects, subject as a random effect
 ```{r}
-# Predicted reaction times
+# Predicted reaction times for all sessions, 1 question at a time
 
 # Step 1: Fit Mixed-Effects Model (use from prev code block)
-# df <- merged_exte # exteroception questions
-df <- merged_interBQ2 # interoception questions
+# afternoon <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sessions$session_cond == "lps" | merged_all_sessions$session_cond == "pl"))
+# morning <- data.frame(dplyr::filter(merged_all_sessions, merged_all_sessions$session_cond == "lpsmorning" | merged_all_sessions$session_cond == "plmorning"))
+df <- merged_exteWQ1
+new_column_name1 <- "time_of_day"  # Dynamically define the new column name
+
+# Add column for time of day (morning or afternoon)
+df_lmer <- df %>%
+  mutate(
+    !!new_column_name1 := case_when(
+      session_cond == "plmorning" | session_cond == "lpsmorning" ~ "morning",
+      session_cond == "pl" | session_cond == "lps" ~ "afternoon",
+      TRUE ~ "Other"  # Default case (optional, in case other values exist)
+    )
+  )
+
+# Add column for condition (lps or placebo)
+new_column_name2 <- "condition"  # Dynamically define the new column name
+
+df_lmer <- df_lmer %>%
+  mutate(
+    !!new_column_name2 := case_when(
+      session_cond == "plmorning" | session_cond == "pl" ~ "pl",
+      session_cond == "lpsmorning" | session_cond == "lps" ~ "lps",
+      TRUE ~ "Other"  # Default case (optional, in case other values exist)
+    )
+  )
+
+# df <- df$new_col <- ifelse(df$col1 > 5, "morning", "afternoon")  # interoception questions
+```
+
+
+```{r}
+
+# Set one condition to be the reference level for the LMER (choose 'plmorning')
+df_lmer$session_cond <- factor(df_lmer$session_cond)
+df_lmer$session_cond <- relevel(df_lmer$session_cond, ref = "plmorning")
+
 
 # Fit the model
-model <- lmer(rt ~ block * session_cond + (1 | subjid), data = df)
+model <- lmer(acc ~ block * session_cond * time_of_day * (session_cond * time_of_day) + (1 | subjid), data = df_lmer)
+
+# Summary stats of the model
+summary(model)
+fixef(model) # Full table of fixed effects
+coef(summary(model)) # Full table of coefficients
+anova(model) # Full table from ANOVA test
+
+# Step 2: Generate Predictions ---------------------------------------------------
+# Create a new data frame for predictions over trials and conditions
+pred_data <- expand.grid(
+  block = 1:10,
+  condition = unique(df_lmer$session_cond),
+  time_of_day = unique(df_lmer$time_of_day),
+  subjid = unique(df_lmer$subjid),
+  session_cond = unique(df_lmer$session_cond)
+)
+
+# Add predictions from the model
+pred_data$pred_rt <- predict(model, newdata = pred_data, re.form = NA)  # re.form = NA excludes random effects
+
+# Step 3: Summarize Reaction Time Data -------------------------------------------
+summary_rt <- df_lmer %>%
+  group_by(session_cond, block) %>%
+  summarise(
+    mean_rt = mean(acc, na.rm = TRUE),
+    se_rt = sd(acc, na.rm = TRUE) / sqrt(n()),  # Standard error
+    lower_ci_rt = mean_rt - 1.96 * se_rt,      # Lower bound of 95% CI
+    upper_ci_rt = mean_rt + 1.96 * se_rt) %>%       # Upper bound of 95% CI
+  ungroup()
+
+# Step 4: Plot Reaction Time with Model Predictions -----------------------------
+# plot_title_rt <- "WQ1 Predicted Reaction Time Over Trials"
+# # color_ord <- list("lps","lpsmorning","pl","plmorning") # define order of condition variables so color palettes match other plots
+# 
+# ggplot(pred_data, aes(x = block, y = pred_rt, color = session_cond, group = session_cond)) +
+#   
+#   # Plot the line for predicted values
+#   geom_line(size = 1.2) +
+#   
+#   # Add points for each trial to highlight individual predicted values
+#   geom_point(size = 2) +
+#   
+#   # Labels and theme adjustments
+#   labs(title = plot_title_rt,
+#        x = "Trials",
+#        y = "Predicted Reaction Time (sec)") +
+#   
+#   # Customize x-axis for trial numbers
+#   scale_x_continuous(breaks = 1:10) +
+#   
+#   theme_minimal() +
+#   theme(legend.position = "right")  # Show legend if useful
+
+# Save the predicted response plot
+#ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/BQ2_predicted_rt.png', bg = 'white')
+```
+
+##4.2 Effect of block on reaction time, response, and accuracy with subject as a random effect (one session at a time)
+```{r}
+# Effect of block on reaction time, response, and accuracy with subject as a random effect (one session at a time)
+
+# Step 1: Fit Mixed-Effects Model (use from prev code block)
+df <- data.frame(dplyr::filter(merged_interBQ2, merged_interBQ2$session_cond == "lps")) # extract one session from df with one question
+# df <- merged_exte # exteroception questions
+# df <- merged_interBQ2 # interoception questions
+
+# Fit the model
+model <- lmer(rt ~ block + (1 | subjid), data = df)
 
 # Summary stats of the model
 summary(model)
@@ -139,7 +270,8 @@ summary_rt <- df %>%
   ungroup()
 
 # Step 4: Plot Reaction Time with Model Predictions -----------------------------
-plot_title_rt <- "BQ2 Predicted Reaction Time Over Trials"
+plot_title_rt <- "LPS: BQ2 Predicted Reaction Time Over Trials"
+# color_ord <- list("lps","lpsmorning","pl","plmorning") # define order of session_cond variables so color palettes match other plots
 
 ggplot(pred_data, aes(x = block, y = pred_rt, color = session_cond, group = session_cond)) +
   
@@ -161,11 +293,11 @@ ggplot(pred_data, aes(x = block, y = pred_rt, color = session_cond, group = sess
   theme(legend.position = "right")  # Show legend if useful
 
 # Save the predicted response plot
-ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/BQ2_predicted_rt.png', bg = 'white')
+ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_change_over_block/lps_BQ2_predicted_rt.png', bg = 'white')
 ```
 
 ```{r}
-# Predicted accuracy (WQ1 only)
+# Predicted accuracy for all sessions, 1 question at a time (WQ1 only)
 
 # Step 1: Fit Mixed-Effects Model (use from prev code block)
 # df <- merged_exte # exteroception questions
@@ -227,7 +359,7 @@ ggsave('/home/common/piaf/LPS_STHLM/analysis_2023/LPS_behavioral_data/plots_chan
 ```
 
 ```{r}
-# Predicted responses (WQ2, BQ1, BQ2)
+# Predicted responses for all sessions, 1 question at a time (WQ2, BQ1, BQ2)
 
 # Step 1: Fit Mixed-Effects Model (use from prev code block)
 # df <- merged_exte # exteroception questions
