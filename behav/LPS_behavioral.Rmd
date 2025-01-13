@@ -1,13 +1,14 @@
 ```
-# Liisbeth's code for LPS study behavioral analysis
+# Behavioral analysis for LPS Study
 
+# Based on Liisbeth Pirn's code for LPS study behavioral analysis
 ##### Edited by Holland Brown to plot effect of block (time) on behav scores
 
-##### Updated 2024-12-03
+##### Updated 2025-01-13
 ##### Created 2024-09-09
 
 ## Notes:
-#### Get timing info (block labels) from /LPS_STHLM/sourcedata/InteroceptionLogFiles/ses-0{1-4}_onsets.csv
+#### To double-check the data when necessary, timing info (block labels) are also available in /LPS_STHLM/sourcedata/InteroceptionLogFiles/ses-0{1-4}_onsets.csv
 #### BQ = body question (i.e. interoception); WQ = word question (i.e. exteroception)
 
 ```
